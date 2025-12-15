@@ -1,0 +1,305 @@
+{
+  "map": [
+    {
+      "path": "map.tmx",
+      "teleport": [
+        {
+          "x": 24,
+          "y": 23,
+          "destination": "gym.tmx"
+        },
+        {
+          "x": 16,
+          "y": 28,
+          "destination": "home.tmx"
+        },
+        {
+          "x": 15,
+          "y": 38,
+          "destination": "beach.tmx"
+        },
+        {
+          "x": 16,
+          "y": 38,
+          "destination": "beach.tmx"
+        }
+      ],
+      "player": {
+        "x": 26.0,
+        "y": 26.0
+      },
+      "enemy_trainers": [
+        {
+          "x": 24.0,
+          "y": 29.0,
+          "classification": "stationary",
+          "facing": "DOWN",
+          "max_tiles": 2,
+          "sprite": 4,
+          "is_shop": false
+        },
+        {
+          "x": 54.0,
+          "y": 16.0,
+          "classification": "stationary",
+          "facing": "UP",
+          "max_tiles": 2,
+          "sprite": 7,
+          "is_shop": false
+        },
+        {
+          "x": 31.0,
+          "y": 31.0,
+          "classification": "stationary",
+          "facing": "UP",
+          "max_tiles": 2,
+          "sprite": 5,
+          "is_shop": false
+        },
+        {
+          "x": 18.0,
+          "y": 28.0,
+          "classification": "stationary",
+          "facing": "DOWN",
+          "max_tiles": 0,
+          "sprite": 3,
+          "is_shop": true
+        }
+      ]
+    },
+    {
+      "path": "gym.tmx",
+      "teleport": [
+        {
+          "x": 11,
+          "y": 14,
+          "destination": "map.tmx"
+        },
+        {
+          "x": 12,
+          "y": 14,
+          "destination": "map.tmx"
+        },
+        {
+          "x": 13,
+          "y": 14,
+          "destination": "map.tmx"
+        }
+      ],
+      "player": {
+        "x": 11.0,
+        "y": 14.0
+      },
+      "enemy_trainers": [
+        {
+          "x": 10.0,
+          "y": 11.0,
+          "classification": "stationary",
+          "facing": "DOWN",
+          "max_tiles": 2,
+          "sprite": 9,
+          "is_shop": false
+        },
+        {
+          "x": 14.0,
+          "y": 11.0,
+          "classification": "stationary",
+          "facing": "DOWN",
+          "max_tiles": 2,
+          "sprite": 8,
+          "is_shop": false
+        }
+      ]
+    },
+    {
+      "path": "home.tmx",
+      "teleport": [
+        {
+          "x": 9,
+          "y": 18,
+          "destination": "map.tmx"
+        },
+        {
+          "x": 10,
+          "y": 18,
+          "destination": "map.tmx"
+        },
+        {
+          "x": 8,
+          "y": 18,
+          "destination": "map.tmx"
+        }
+      ],
+      "player": {
+        "x": 8.0,
+        "y": 18.0
+      },
+      "enemy_trainers": []
+    },
+    {
+      "path": "beach.tmx",
+      "teleport": [
+        {
+          "x": 9,
+          "y": 0,
+          "destination": "map.tmx"
+        },
+        {
+          "x": 10,
+          "y": 0,
+          "destination": "map.tmx"
+        }
+      ],
+      "player": {
+        "x": 9.0,
+        "y": 1.0
+      },
+      "enemy_trainers": [
+        {
+          "x": 15.0,
+          "y": 9.0,
+          "classification": "stationary",
+          "facing": "DOWN",
+          "max_tiles": 2,
+          "sprite": 2,
+          "is_shop": false
+        }
+      ]
+    }
+  ],
+  "current_map": "map.tmx",
+  "player": {
+    "x": 19.75470476093298,
+    "y": 31.16486464811372
+  },
+  "bag": {
+    "monsters": [
+      {
+        "id": 3,
+        "name": "Leafmane",
+        "element": "grass",
+        "max_hp": 492,
+        "attack": 177,
+        "defense": 120,
+        "sprite_path": "menu_sprites/menusprite3.png",
+        "battle_idle_path": "sprites/sprite3_idle.png",
+        "battle_attack_path": "sprites/sprite3_attack.png",
+        "evolve_to": null,
+        "level": 50,
+        "hp": 249
+      },
+      {
+        "id": 7,
+        "name": "Flamkit",
+        "element": "fire",
+        "level": 7,
+        "max_hp": 108,
+        "hp": 108,
+        "attack": 38,
+        "defense": 22,
+        "sprite_path": "menu_sprites/menusprite7.png",
+        "battle_idle_path": "sprites/sprite7_idle.png",
+        "battle_attack_path": "sprites/sprite7_attack.png",
+        "evolve_to": 8
+      },
+      {
+        "id": 4,
+        "name": "Pengullet",
+        "element": "water",
+        "level": 6,
+        "max_hp": 110,
+        "hp": 110,
+        "attack": 33,
+        "defense": 22,
+        "sprite_path": "menu_sprites/menusprite4.png",
+        "battle_idle_path": "sprites/sprite4_idle.png",
+        "battle_attack_path": "sprites/sprite4_attack.png",
+        "evolve_to": null
+      },
+      {
+        "id": 3,
+        "name": "Leafmane",
+        "element": "grass",
+        "max_hp": 492,
+        "attack": 177,
+        "defense": 120,
+        "sprite_path": "menu_sprites/menusprite3.png",
+        "battle_idle_path": "sprites/sprite3_idle.png",
+        "battle_attack_path": "sprites/sprite3_attack.png",
+        "evolve_to": null,
+        "level": 50,
+        "hp": 492,
+        "buff_strength_pending": true
+      },
+      {
+        "id": 9,
+        "name": "Flamcry",
+        "element": "fire",
+        "max_hp": 132,
+        "attack": 46,
+        "defense": 30,
+        "sprite_path": "menu_sprites/menusprite9.png",
+        "battle_idle_path": "sprites/sprite9_idle.png",
+        "battle_attack_path": "sprites/sprite9_attack.png",
+        "evolve_to": null,
+        "level": 5,
+        "hp": 132
+      },
+      {
+        "id": 14,
+        "name": "Hydrorel",
+        "element": "water",
+        "max_hp": 382,
+        "attack": 137,
+        "defense": 92,
+        "sprite_path": "menu_sprites/menusprite14.png",
+        "battle_idle_path": "sprites/sprite14_idle.png",
+        "battle_attack_path": "sprites/sprite14_attack.png",
+        "evolve_to": null,
+        "level": 35,
+        "hp": 382
+      }
+    ],
+    "items": [
+      {
+        "name": "Coins",
+        "count": 2677,
+        "sprite_path": "ingame_ui/coin.png"
+      },
+      {
+        "name": "Pokeball",
+        "count": 13,
+        "sprite_path": "ingame_ui/ball.png"
+      },
+      {
+        "name": "Heal Potion",
+        "count": 2,
+        "sprite_path": "ingame_ui/potion.png"
+      },
+      {
+        "name": "Strength Potion",
+        "count": 6,
+        "sprite_path": "ingame_ui/options1.png"
+      },
+      {
+        "name": "Defense Potion",
+        "count": 3,
+        "sprite_path": "ingame_ui/options2.png"
+      },
+      {
+        "name": "Level Up",
+        "count": 1,
+        "sprite_path": "element/levelup.png"
+      },
+      {
+        "name": "Evolve Stone",
+        "count": 1,
+        "sprite_path": "element/involve.png"
+      }
+    ]
+  },
+  "settings": {
+    "volume": 0.18,
+    "mute_bgm": false
+  }
+}
