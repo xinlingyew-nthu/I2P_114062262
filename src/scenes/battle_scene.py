@@ -537,6 +537,7 @@ class BattleScene(Scene):
     def _refresh_player_visuals(self):
 
         if self.player_mon is None:
+            
             return
 
         # 重新載入圖片

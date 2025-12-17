@@ -19,6 +19,7 @@ from src.sprites import Sprite
 from typing import override
 from src.scenes.battle_scene import BattleScene
 from src.scenes.bush_scene import BushScene
+from collections import deque
 
 
 class GameScene(Scene):
@@ -192,8 +193,50 @@ class GameScene(Scene):
         #minimap
         self.minimap = MiniMap()
         self.map_pixel_w = 1
-        self.map_pixel_h = 1        
+        self.map_pixel_h = 1   
+        self.nav_map_route:list[str] =["map.tmx","beach.tmx","gym.tmx"]
+        # nav button (在 bag 按鈕左邊)
+        button_nav_x = GameSettings.SCREEN_WIDTH - 220   # 比 -150 再往左 70（可自己調）
+        button_nav_y = 20
+        button_nav_w = 60
+        button_nav_h = 60
+    
 
+        self.nav_button = Button(
+            "UI/raw/UI_Flat_Button02a_3.png",
+            "UI/raw/UI_Flat_Button02a_1.png",
+            button_nav_x, button_nav_y, button_nav_w, button_nav_h,
+            lambda: self._open_nav()
+        )
+        self.nav_icon = load_img("UI/map.png")
+        self.nav_open = False
+        self.nav_frame = Sprite("UI/raw/UI_Flat_Frame02a.png", (520, 420))
+
+
+        self.nav_places = [
+            {"key":"home",  "label":"Home", "map":"home.tmx",  "tx": 9,  "ty": 17},
+            {"key":"gym",   "label":"Gym",  "map":"gym.tmx",   "tx": 12, "ty": 12},
+            {"key":"story1","label":"Story","map":"beach.tmx", "tx": 15, "ty": 10},
+            {"key":"story2","label":"Story 2","map":"beach.tmx","tx": 4, "ty": 3},
+        ]
+
+        self.nav_cancel_button = Button(
+            "UI/button_back.png",
+            "UI/button_back_hover.png",  
+            0, 0, 40, 40,
+            lambda: self._cancel_nav()
+        )
+        self.nav_place_buttons: list[Button] = []
+        self.nav_close_button = Button(
+            "UI/button_x.png", "UI/button_x_hover.png",
+            0, 0, 40, 40,
+            lambda: self._close_nav()
+        )
+        self.nav_path: list[tuple[int,int]] = []
+        self.nav_goal: dict | None = None          # 你点的目的地 place
+        self.nav_route_maps: list[str] = []        # map bfs 得到的跨图路线
+        self._nav_last_map: str | None = None      # 用来侦测换地图
+        self._nav_last_player_tile: tuple[int,int] | None = None
 
     def checkbox_check(self):
         self.is_muted = not self.is_muted
@@ -261,6 +304,32 @@ class GameScene(Scene):
             pg.draw.rect(screen, (0, 0, 0), bg_rect)
             screen.blit(surf, (bg_rect.x + padding, bg_rect.y + padding))
 
+    def _get_tp_tile(self, tp) -> tuple[int,int] | None:
+        t = GameSettings.TILE_SIZE
+
+        # 1) tp.rect (世界座標)
+        wx = wy = None
+
+        r = getattr(tp, "rect", None)
+        if r is not None:
+            wx, wy = r.centerx, r.centery
+        elif hasattr(tp, "x") and hasattr(tp, "y"):
+            wx, wy = tp.x, tp.y
+        else:
+            pos = getattr(tp, "pos", None) 
+            if isinstance(pos, Position):
+                wx, wy = pos.x, pos.y
+
+        if wx is None or wy is None:
+            return None
+
+        # ✅ 如果看起來是像素（很大），轉成 tile
+        # 常見 map 大小 < 200 tiles，所以 px 通常會 > 200
+        if wx > 200 or wy > 200:
+            return int(wx // t), int(wy // t)
+
+        # 否則當作已經是 tile
+        return int(wx), int(wy)
 
     def save_game(self):
         self.game_manager.save("saves/game0.json")
@@ -316,6 +385,243 @@ class GameScene(Scene):
         self.shop_open = False
         self.current_shop_npc = None
 
+        #navigate
+    def _open_nav(self):
+        self.nav_open = True
+        self._build_nav_buttons()
+
+    def _close_nav(self):
+        self.nav_open = False
+
+    def _cancel_nav(self):
+        self.nav_goal = None
+        self.nav_route_maps = []
+        self.nav_path = []
+        self._nav_last_map = None
+        self._nav_last_player_tile = None
+        self.nav_open = False   # 顺便关掉nav面板（你也可以不关）
+        self.add_toast("Nav cancelled")
+
+    def _recompute_nav_path(self):
+        if self.nav_goal is None:
+            self.nav_path = []
+            return
+
+        player = self.game_manager.player
+        if player is None:
+            self.nav_path = []
+            return
+
+        cur_map = self.game_manager.current_map
+        cur_key = cur_map.path_name
+        dest_map = self.nav_goal["map"]
+
+        start = self._player_tile(player)
+
+        # 决定“这张地图要走到哪里”
+        if cur_key == dest_map:
+            goal = (self.nav_goal["tx"], self.nav_goal["ty"])
+        else:
+            # 跨地图：走到下一跳地图的 teleporter
+            if not self.nav_route_maps or cur_key not in self.nav_route_maps:
+                self.nav_path = []
+                return
+            idx = self.nav_route_maps.index(cur_key)
+            if idx >= len(self.nav_route_maps) - 1:
+                self.nav_path = []
+                return
+            next_map = self.nav_route_maps[idx + 1]
+
+            tp_goal = self._find_tp_to(cur_map, next_map)
+            if tp_goal is None:
+                self.nav_path = []
+                return
+            goal = tp_goal
+
+        blocked = self._blocked_tiles(cur_map)
+        w, h = cur_map.tmxdata.width, cur_map.tmxdata.height
+        path = self._bfs(start, goal, blocked, w, h)
+
+        self.nav_path = path
+
+    def _find_tp_to(self, cur_map, dest_map: str):
+        best_tile = None
+        min_dist = float('inf')
+        
+        player_tile = self._tile_of_world(self.game_manager.player.position.x, self.game_manager.player.position.y)
+
+
+        for tp in getattr(cur_map, "teleporters", []):
+            if getattr(tp, "destination", None) == dest_map:
+                tile = self._get_tp_tile(tp)
+                if tile:
+                    # 計算歐幾里得距離平方
+                    dist = (tile[0] - player_tile[0])**2 + (tile[1] - player_tile[1])**2
+                    if dist < min_dist:
+                        min_dist = dist
+                        best_tile = tile
+        return best_tile
+
+    def _map_bfs(self, start_map: str, goal_map: str) -> list[str]:
+        # 你也可以把這些 map 名單集中管理
+        all_maps = ["map.tmx", "home.tmx", "gym.tmx", "beach.tmx"]
+
+        # 建 adjacency
+        adj = {m: [] for m in all_maps}
+
+        adj["gym.tmx"] = ["map.tmx"]
+        adj["home.tmx"] = ["map.tmx"]
+        adj["beach.tmx"] = ["map.tmx"]
+        adj["map.tmx"] = ["gym.tmx", "home.tmx", "beach.tmx"]
+
+        q = deque([start_map])
+        prev = {start_map: None}
+        while q:
+            m = q.popleft()
+            if m == goal_map:
+                break
+            for nb in adj.get(m, []):
+                if nb in prev:
+                    continue
+                prev[nb] = m
+                q.append(nb)
+
+        if goal_map not in prev:
+            return []
+
+        route = []
+        cur = goal_map
+        while cur is not None:
+            route.append(cur)
+            cur = prev[cur]
+        route.reverse()
+        return route
+
+    def _build_nav_buttons(self):
+        self.nav_place_buttons.clear()
+
+        fw, fh = self.nav_frame.image.get_size()
+        fx = GameSettings.SCREEN_WIDTH // 2 - fw // 2
+        fy = GameSettings.SCREEN_HEIGHT // 2 - fh // 2
+
+        
+        size = 90
+        gap = 18
+        start_x = fx + 40
+        y = fy + 50
+
+        for i, p in enumerate(self.nav_places):
+            x = start_x + i * (size + gap)
+            b = Button(
+                "UI/raw/UI_Flat_Button02a_3.png",
+                "UI/raw/UI_Flat_Button02a_1.png",
+                x, y, size, size,
+                lambda place=p: self._start_navigation(place)
+            )
+            self.nav_place_buttons.append(b)
+
+    def _tile_of_world(self, x: float, y: float) -> tuple[int,int]:
+        t = GameSettings.TILE_SIZE
+        return int(x // t), int(y // t)
+
+    def _player_tile(self, player) -> tuple[int,int]:
+        r = player.animation.rect
+        # 用脚底中心（站在地上那一点）
+        wx = r.centerx
+        wy = r.bottom - 2
+        return self._tile_of_world(wx, wy)
+
+    def _blocked_tiles(self, game_map) -> set[tuple[int,int]]:
+        blocked = set()
+        t = GameSettings.TILE_SIZE
+
+        rects = getattr(game_map, "_collision_map", [])
+        for r in rects:
+            x0 = int(r.left // t)
+            x1 = int((r.right - 1) // t)
+            y0 = int(r.top // t)
+            y1 = int((r.bottom - 1) // t)
+            for tx in range(x0, x1 + 1):
+                for ty in range(y0, y1 + 1):
+                    blocked.add((tx, ty))
+
+        # trainer 當障礙
+        for e in self.game_manager.current_enemy_trainers:
+            rr = e.animation.rect
+            ex, ey = int(rr.centerx // t), int(rr.centery // t)
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    blocked.add((ex + dx, ey + dy))
+        return blocked
+
+    def _bfs(self, start, goal, blocked, w, h):
+        if goal is None: return []
+        if start == goal: return [start]
+
+        blocked = set(blocked)
+        blocked.discard(goal) 
+
+        q = deque([start])
+        prev = {start: None}
+        
+        # 方向定義：前4個是軸向，後4個是斜向
+        dirs = [(1,0),(-1,0),(0,1),(0,-1)]
+
+        while q:
+            x, y = q.popleft()
+            for dx, dy in dirs:
+                nx, ny = x + dx, y + dy
+                
+                if not (0 <= nx < w and 0 <= ny < h): continue
+                if (nx, ny) in blocked: continue
+                
+                # 如果是斜向移動，必須確保兩側的軸向格子也是空的
+                if dx != 0 and dy != 0:
+                    if (x + dx, y) in blocked or (x, y + dy) in blocked:
+                        continue
+
+                if (nx, ny) not in prev:
+                    prev[(nx, ny)] = (x, y)
+                    if (nx, ny) == goal:
+                        q.clear()
+                        break
+                    q.append((nx, ny))
+        if goal not in prev:
+            return []
+
+        path = []
+        cur = goal
+        while cur is not None:
+            path.append(cur)
+            cur = prev[cur]
+        path.reverse()
+        return path
+
+    def _start_navigation(self, place: dict):
+
+        self.nav_goal = place
+
+        cur_key = self.game_manager.current_map.path_name
+        dest_map = place["map"]
+
+        # 建跨图路线（同图就只是一张）
+        if cur_key == dest_map:
+            self.nav_route_maps = [cur_key]
+        else:
+            self.nav_route_maps = self._map_bfs(cur_key, dest_map)
+
+        self._close_nav()
+        self.add_toast(f"Route to {place['label']}")
+
+        # 立刻算一次
+        self._recompute_nav_path()
+
+        # 记录当前 map / tile，避免下一帧重复算
+        self._nav_last_map = cur_key
+        if self.game_manager.player:
+            self._nav_last_player_tile = self._player_tile(self.game_manager.player)
+    
+
     @override
     def enter(self) -> None:
         sound_manager.play_bgm("RBY 103 Pallet Town.ogg")
@@ -355,6 +661,36 @@ class GameScene(Scene):
         # Check if there is assigned next scene
         self.shop.update_timer(dt)
         self.game_manager.try_switch_map()
+
+        cur_key = self.game_manager.current_map.path_name
+        if self.nav_goal is not None:
+            # 地图切换：重算
+            if self._nav_last_map != cur_key:
+                self._nav_last_map = cur_key
+                self._recompute_nav_path()
+
+            # 玩家走到新 tile：重算
+            if self.game_manager.player:
+                t = self._player_tile(self.game_manager.player)
+                if t != self._nav_last_player_tile:
+                    self._nav_last_player_tile = t
+                    self._recompute_nav_path()
+                    
+            if self.nav_goal is not None and self.game_manager.player:
+                cur_key = self.game_manager.current_map.path_name
+                dest_map = self.nav_goal["map"]
+
+                if cur_key == dest_map:
+                    player_tile = self._player_tile(self.game_manager.player)
+                    goal_tile = (self.nav_goal["tx"], self.nav_goal["ty"])
+
+                    if player_tile == goal_tile:
+                        # 清掉导航
+                        self.nav_goal = None
+                        self.nav_route_maps = []
+                        self.nav_path = []
+
+                        self.add_toast("Arrived!")
         # 1) 先記住上一張地圖（第一次進來可能沒有）
         prev_map = getattr(self, "_minimap_prev_map", None)
         cur_map = self.game_manager.current_map.path_name
@@ -382,6 +718,9 @@ class GameScene(Scene):
         #更新位置
         self.overlay_button.update(dt)
         self.bag_button.update(dt)
+        self.nav_button.update(dt)
+        if self.nav_button.on_click:
+            pass
 
         # Update player and other data
         if self.game_manager.player:
@@ -445,7 +784,15 @@ class GameScene(Scene):
         if input_manager.key_pressed(pg.K_b):
             if not self.overlay_open and not self.shop.overlay_open:
                 self.open_bag_overlay()
-        
+
+        if self.nav_open:
+            self.nav_close_button.update(dt)
+            self.nav_cancel_button.update(dt)
+            for b in self.nav_place_buttons:
+                b.update(dt)
+            if input_manager.key_pressed(pg.K_ESCAPE):
+                self._close_nav()
+                    
         if self.overlaybag_open:
             self.overlay_button_back.update(dt)
             self.game_manager.bag.update(dt)
@@ -549,6 +896,13 @@ class GameScene(Scene):
         else:
             self.slider_touch = False       
 
+        #nav 清楚路线
+        if input_manager.key_pressed(pg.K_n):
+            self.nav_goal = None
+            self.nav_route_maps = []
+            self.nav_path = []
+            self.add_toast("Route cleared")
+
         
    
         
@@ -582,8 +936,48 @@ class GameScene(Scene):
         self.overlay_button.draw(screen)
         self.bag_button.draw(screen)
 
+        self.nav_button.draw(screen)
+
+        icon = pg.transform.scale(self.nav_icon, (36, 36))
+        br = self.nav_button.hitbox
+        screen.blit(icon, (br.x + 12, br.y + 12))
 
 
+        if self.nav_open:
+            overlay = pg.Surface((GameSettings.SCREEN_WIDTH, GameSettings.SCREEN_HEIGHT), pg.SRCALPHA)
+            overlay.fill((0, 0, 0, 160))
+            screen.blit(overlay, (0, 0))
+
+            fw, fh = self.nav_frame.image.get_size()
+            fx = GameSettings.SCREEN_WIDTH // 2 - fw // 2
+            fy = GameSettings.SCREEN_HEIGHT // 2 - fh // 2
+            self.nav_frame.rect.topleft = (fx, fy)
+            screen.blit(self.nav_frame.image, self.nav_frame.rect)
+
+            # close X
+            cr = self.nav_close_button.hitbox
+            cr.x = fx + fw - 50
+            cr.y = fy + 15
+            self.nav_close_button.draw(screen)
+            
+            # cancel nav (back)
+            br = self.nav_cancel_button.hitbox
+            br.x = fx + fw - 95   # X 左边
+            br.y = fy + 15
+            self.nav_cancel_button.draw(screen)
+
+            # 地點按鈕 + 地點文字
+            for i, b in enumerate(self.nav_place_buttons):
+                b.draw(screen)
+                p = self.nav_places[i]
+                rr = b.hitbox
+
+                label = self.word.render(p["label"], True, (0,0,0))
+                lx = rr.centerx - label.get_width() // 2
+                ly = rr.bottom + 6
+                screen.blit(label, (lx, ly))
+
+            self._draw_toasts(screen)
         if self.overlay_open:
             # 畫暗背景
             overlay=pg.Surface((GameSettings.SCREEN_WIDTH,GameSettings.SCREEN_HEIGHT),pg.SRCALPHA)
@@ -688,7 +1082,8 @@ class GameScene(Scene):
             self.overlay_flat_bag_sprite.rect.topleft=(flat_bag_x,flat_bag_y)
             screen.blit(self.overlay_flat_bag_sprite.image, self.overlay_flat_bag_sprite.rect)      
             self.game_manager.bag.draw(screen)              
-            self.overlay_button_back.draw(screen)                
+            self.overlay_button_back.draw(screen)   
+                 
 
         #bush
         if self.overlay_open or self.overlaybag_open:
@@ -745,3 +1140,51 @@ class GameScene(Scene):
             camera_rect=getattr(self, "camera_rect", None)
         )
         self._draw_toasts(screen)
+
+        #draw arrow
+
+        if self.nav_path and not (self.overlay_open or self.overlaybag_open or self.nav_open):
+            camera = self.game_manager.player.camera
+
+            pts = []
+            for (tx, ty) in self.nav_path:
+                wx = tx * GameSettings.TILE_SIZE + GameSettings.TILE_SIZE // 2
+                wy = ty * GameSettings.TILE_SIZE + GameSettings.TILE_SIZE // 2
+                p = camera.transform_position_as_position(Position(wx, wy))
+                pts.append((int(p.x), int(p.y)))
+        
+            if len(pts) >= 2:
+                dot_gap = 18   # 点与点之间的间距（像素），想更密就调小
+                glow_r = 6     # 外光半径
+                core_r = 3     # 内点半径
+
+                last = pts[0]
+                acc = 0.0
+
+                for i in range(1, len(pts)):
+                    x1, y1 = last
+                    x2, y2 = pts[i]
+                    dx, dy = x2 - x1, y2 - y1
+                    seg_len = (dx*dx + dy*dy) ** 0.5
+                    if seg_len == 0:
+                        continue
+
+                    ux, uy = dx / seg_len, dy / seg_len
+                    dist = 0.0
+                    while dist + acc <= seg_len:
+                        d = dist + acc
+                        px = x1 + ux * d
+                        py = y1 + uy * d
+
+                        # 外光（半透明）
+                        glow = pg.Surface((glow_r*2+2, glow_r*2+2), pg.SRCALPHA)
+                        pg.draw.circle(glow, (255, 255, 255, 90), (glow_r+1, glow_r+1), glow_r)
+                        screen.blit(glow, (px - glow_r - 1, py - glow_r - 1))
+
+                        # 内点（实心白）
+                        pg.draw.circle(screen, (255, 255, 255), (int(px), int(py)), core_r)
+
+                        dist += dot_gap
+
+                    acc = (dist + acc) - seg_len
+                    last = (x2, y2)

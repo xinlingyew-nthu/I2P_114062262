@@ -21,29 +21,27 @@ class Player(Entity):
     def update(self, dt: float) -> None:
         dis = Position(0, 0)
         # 減少冷卻時間
-        
+        forced=getattr(self,"forced_dir",None)
+        if forced is not None:
+            # forced_dir = (fx, fy) 其中 fx/fy 是 -1/0/1
+            dis.x, dis.y = forced
+
+        else:
+            if input_manager.key_down(pg.K_LEFT) or input_manager.key_down(pg.K_a):
+                dis.x -= 1
+            if input_manager.key_down(pg.K_RIGHT) or input_manager.key_down(pg.K_d):
+                dis.x += 1
+            if input_manager.key_down(pg.K_UP) or input_manager.key_down(pg.K_w):
+                dis.y -= 1
+            if input_manager.key_down(pg.K_DOWN) or input_manager.key_down(pg.K_s):
+                dis.y += 1
+
+            # 原本的 key_down 判斷全部留著
+                
         '''
         [TODO HACKATHON 2]
         Calculate the distance change, and then normalize the distance
         '''
-        # moving=False
-        if input_manager.key_down(pg.K_LEFT) or input_manager.key_down(pg.K_a):
-            dis.x -= 1
-            # self.animation.switch("left")
-            # moving=True
-
-        if input_manager.key_down(pg.K_RIGHT) or input_manager.key_down(pg.K_d):
-            dis.x += 1
-            # self.animation.switch("right")
-            # moving=True
-
-        if input_manager.key_down(pg.K_UP) or input_manager.key_down(pg.K_w):
-            dis.y -= 1
-            # self.animation.switch("up")
-            # moving=True
-        if input_manager.key_down(pg.K_DOWN) or input_manager.key_down(pg.K_s):
-            dis.y += 1
-            # self.animation.switch("down")
 
         facing: str | None = None
         if dis.y < 0:

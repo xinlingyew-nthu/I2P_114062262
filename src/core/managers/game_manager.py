@@ -42,6 +42,10 @@ class GameManager:
         self.should_change_scene = False
         self.next_map = ""
         self.next_spawn: Position | None = None
+
+        if not hasattr(self, "quests") or self.quests is None:
+            self.quests = {}
+        self.quests.setdefault("beach_missing_mon", {"accepted": False, "caught": False})
         
     @property
     def current_map(self) -> Map:
