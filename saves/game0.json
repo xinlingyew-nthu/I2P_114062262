@@ -87,8 +87,8 @@
         }
       ],
       "player": {
-        "x": 11.0,
-        "y": 14.0
+        "x": 12.0,
+        "y": 13.0
       },
       "enemy_trainers": [
         {
@@ -116,22 +116,22 @@
       "teleport": [
         {
           "x": 9,
-          "y": 18,
+          "y": 19,
           "destination": "map.tmx"
         },
         {
           "x": 10,
-          "y": 18,
+          "y": 19,
           "destination": "map.tmx"
         },
         {
           "x": 8,
-          "y": 18,
+          "y": 19,
           "destination": "map.tmx"
         }
       ],
       "player": {
-        "x": 8.0,
+        "x": 9.0,
         "y": 18.0
       },
       "enemy_trainers": []
@@ -152,7 +152,7 @@
       ],
       "player": {
         "x": 9.0,
-        "y": 0.0
+        "y": 1.0
       },
       "enemy_trainers": [
         {
@@ -169,8 +169,8 @@
   ],
   "current_map": "map.tmx",
   "player": {
-    "x": 15.882371716450255,
-    "y": 31.45762828354981
+    "x": 14.804839543621032,
+    "y": 32.0
   },
   "bag": {
     "monsters": [
@@ -299,7 +299,7 @@
     ]
   },
   "settings": {
-    "volume": 0.18,
+    "volume": 0.31,
     "mute_bgm": false
   }
 }

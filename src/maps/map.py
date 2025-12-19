@@ -71,15 +71,17 @@ class Map:
         '''
         return any(rect.colliderect(r) for r in self._collision_map)
         
-    def check_teleport(self, pos: Position) -> Teleport | None:
-        '''TODO: Teleportation'''
-        tile_x=int(pos.x//GameSettings.TILE_SIZE)
-        tile_y=int(pos.y//GameSettings.TILE_SIZE)
+    def check_teleport(self, player_rect: pg.Rect) -> Teleport | None:
+        t = GameSettings.TILE_SIZE
+
+        # 用脚底中心点判定所在 tile（比左上角稳很多）
+        tile_x = int(player_rect.centerx // t)
+        tile_y = int((player_rect.bottom - 2) // t)
 
         for tp in self.teleporters:
-            tp_tile_x=int(tp.pos.x // GameSettings.TILE_SIZE)
-            tp_tile_y=int(tp.pos.y // GameSettings.TILE_SIZE)
-            if tile_x == tp_tile_x and tile_y== tp_tile_y:
+            tp_tile_x = int(tp.pos.x // t)
+            tp_tile_y = int(tp.pos.y // t)
+            if tile_x == tp_tile_x and tile_y == tp_tile_y:
                 return tp
         return None
 

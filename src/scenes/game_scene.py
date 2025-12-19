@@ -383,7 +383,7 @@ class GameScene(Scene):
         proto = random.choice(MONSTER_DATA)
 
         # 隨機等級（0~50）
-        level = random.randint(0, 50)
+        level = random.randint(1, 50)
 
         # 用你的升級倍率生成真正的怪物
         enemy_mon = build_monster(proto, level)
@@ -688,6 +688,40 @@ class GameScene(Scene):
         dx = (pr.centerx - nr.centerx) / t
         dy = (pr.centery - nr.centery) / t
         return dx*dx + dy*dy <= dist_tiles*dist_tiles
+    
+    def _ui_modal_open(self) -> bool:
+        return (
+            self.overlay_open
+            or self.overlaybag_open
+            or self.nav_open
+            or self.shop.overlay_open
+            or self.dialog_open
+        )
+
+    def _draw_hint_under_player(self, screen: pg.Surface, text: str, y_offset: int = 10) -> None:
+        player = self.game_manager.player
+        if player is None:
+            return
+
+        camera = player.camera
+
+        # 玩家脚底中心（世界座标）
+        r = player.animation.rect
+        feet_world = Position(r.centerx, r.bottom - 2)
+
+        # 转成屏幕座标
+        feet_screen = camera.transform_position_as_position(feet_world)
+
+        surf = self.small_word.render(text, True, (255, 255, 255))
+
+        # 黑底让字更清楚
+        pad = 6
+        bg = pg.Surface((surf.get_width() + pad*2, surf.get_height() + pad*2), pg.SRCALPHA)
+        bg.fill((0, 0, 0, 160))
+
+        bg_rect = bg.get_rect(center=(feet_screen.x, feet_screen.y + y_offset))
+        screen.blit(bg, bg_rect.topleft)
+        screen.blit(surf, (bg_rect.x + pad, bg_rect.y + pad))
             
 
     @override
@@ -907,7 +941,7 @@ class GameScene(Scene):
 
             # ====== (2) 普通草丛：随机遇敌（你原本的功能要补回来） ======
             proto = random.choice(MONSTER_DATA)
-            level = random.randint(0, 50)
+            level = random.randint(1, 50)
             wild_mon = build_monster(proto, level)
 
             bush_scene = scene_manager.get_scene("bush")
@@ -1145,6 +1179,8 @@ class GameScene(Scene):
                 screen.blit(label, (lx, ly))
 
             self._draw_toasts(screen)
+            return
+        
         if self.overlay_open:
             # 畫暗背景
             overlay=pg.Surface((GameSettings.SCREEN_WIDTH,GameSettings.SCREEN_HEIGHT),pg.SRCALPHA)
@@ -1280,19 +1316,31 @@ class GameScene(Scene):
                 hint_rect.midbottom = (screen_rect.centerx, screen_rect.top - 40)
                 screen.blit(hint, hint_rect)
         #quest
-        if self.game_manager.current_map.path_name == "beach.tmx" and self.game_manager.player:
+        if not self._ui_modal_open() and self.game_manager.player:
+            q = self.game_manager.quests.get("beach_missing_mon", None)
+            cur_map = self.game_manager.current_map.path_name
             pt = self._player_tile(self.game_manager.player)
-            if abs(pt[0]-15) <= 1 and abs(pt[1]-9) <= 1:
-                hint = self.small_word.render("PRESS E TO TALK", True, (255,255,255))
-                screen.blit(hint, (20, 80))
 
-        q = self.game_manager.quests.get("beach_missing_mon", None)
-        if q and q.get("accepted") and (not q.get("caught")):
-            if self.game_manager.current_map.path_name == "beach.tmx" and self.game_manager.player:
-                pt = self._player_tile(self.game_manager.player)
-                if pt == (4, 3):
-                    hint = self.small_word.render("PRESS E TO CHECK BUSH", True, (255,255,255))
-                    screen.blit(hint, (20, 110))
+            hint_text = None
+
+            # (A) 剧情草丛：beach (4,3) + 已接任务 + 未完成 → 最高优先
+            if (
+                cur_map == "beach.tmx"
+                and q and q.get("accepted") and (not q.get("caught"))
+                and abs(pt[0] - 4) <= 1 and abs(pt[1] - 3) <= 1
+            ):
+                hint_text = "PRESS E ENTER STORY"
+
+            # (B) 任务 NPC：beach (15,9) 附近 → 次高优先
+            elif cur_map == "beach.tmx" and abs(pt[0] - 15) <= 1 and abs(pt[1] - 9) <= 1:
+                hint_text = "PRESS E TO TALK"
+
+            # # (C) 一般草丛：你现在已经用 in_bush_zone 判断了 → 最低优先
+            # elif self.in_bush_zone:
+            #     hint_text = "PRESS E TO CATCH POKEMON"
+
+            if hint_text:
+                self._draw_hint_under_player(screen, hint_text, y_offset=18)
         
         if self.online_manager and self.game_manager.player:
             list_online = self.online_manager.get_list_players()
@@ -1332,7 +1380,7 @@ class GameScene(Scene):
 
         #draw arrow
 
-        if self.nav_path and not (self.overlay_open or self.overlaybag_open or self.nav_open):
+        if self.nav_path and not self._ui_modal_open():
             camera = self.game_manager.player.camera
 
             pts = []

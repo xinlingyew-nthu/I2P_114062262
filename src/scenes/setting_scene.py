@@ -47,7 +47,7 @@ class SettingScene(Scene):
         
         self.slider_x=GameSettings.SCREEN_HEIGHT // 2+100
         self.slider_y=GameSettings.SCREEN_HEIGHT//2
-        self.slider_value=100
+        self.slider_value = int(GameSettings.AUDIO_VOLUME * 100)
         self.slider_touch=False
 
         self.slider_bar_sprite = Sprite(

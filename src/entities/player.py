@@ -122,7 +122,7 @@ class Player(Entity):
         # self.teleport_cooldown = 0.0
         self.teleport_cooldown = max(0.0, self.teleport_cooldown - dt)
         if self.teleport_cooldown <= 0:
-            tp = self.game_manager.current_map.check_teleport(self.position)
+            tp = self.game_manager.current_map.check_teleport(self.animation.rect)
             if tp:
                 dest = tp.destination
 

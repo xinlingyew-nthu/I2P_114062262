@@ -91,8 +91,23 @@ class GameManager:
         
     def save(self, path: str) -> None:
         try:
-            with open(path, "w") as f:
-                json.dump(self.to_dict(), f, indent=2)
+            old = {}
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    old = json.load(f)
+
+            # ✅ 保留旧的 map（里面包含 teleport / spawn / trainers 配置）
+            keep_map = old.get("map")
+
+            new_data = self.to_dict()
+
+            # 把 map 换回旧的（或如果旧档没有 map，就用当前的）
+            if keep_map is not None:
+                new_data["map"] = keep_map
+
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(new_data, f, indent=2)
+
             Logger.info(f"Game saved to {path}")
         except Exception as e:
             Logger.warning(f"Failed to save game: {e}")

@@ -62,12 +62,18 @@ class Teleport:
             self.destination = dest
     
     def to_dict(self):
+        # return {
+        #     "x": self.pos.x // GameSettings.TILE_SIZE,
+        #     "y": self.pos.y // GameSettings.TILE_SIZE,
+        #     "destination": self.destination
+        # }
+        t = GameSettings.TILE_SIZE
         return {
-            "x": self.pos.x // GameSettings.TILE_SIZE,
-            "y": self.pos.y // GameSettings.TILE_SIZE,
+            "x": int(round(self.pos.x / t)),
+            "y": int(round(self.pos.y / t)),
             "destination": self.destination
         }
-    
+        
     @classmethod
     def from_dict(cls, data: dict):
         return cls(data["x"] * GameSettings.TILE_SIZE, data["y"] * GameSettings.TILE_SIZE, data["destination"])
