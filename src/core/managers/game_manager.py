@@ -77,7 +77,7 @@ class GameManager:
                     self.player.position = self.next_spawn
                     self.next_spawn = None
                 else:
-                    # ⭐ 否則才用地圖原本的 spawn
+  
                     self.player.position = self.maps[self.current_map_key].spawn
             
     def check_collision(self, rect: pg.Rect) -> bool:

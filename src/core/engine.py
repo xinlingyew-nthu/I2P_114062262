@@ -9,6 +9,7 @@ from src.scenes.game_scene import GameScene
 from src.scenes.battle_scene import BattleScene
 from src.scenes.setting_scene import SettingScene
 from src.scenes.bush_scene import BushScene
+from src.scenes.dialog_scene import DialogScene
 
 class Engine:
 
@@ -39,7 +40,7 @@ class Engine:
         scene_manager.change_scene("menu")
         scene_manager.register_scene("battle", BattleScene())
         scene_manager.register_scene("bush", BushScene())
-
+        scene_manager.register_scene("dialog", DialogScene())
     def run(self):
         Logger.info("Running the Game Loop ...")
 

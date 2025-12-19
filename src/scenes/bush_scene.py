@@ -29,6 +29,8 @@ class BushScene(Scene):
         self.dmg: int = 20
         self.message_text: str | None = None
         self.last_damage_info = None
+        #quest
+        self.on_caught = None
 
         # 圖片
         self.player_sprite: pg.Surface | None = None
@@ -225,7 +227,8 @@ class BushScene(Scene):
             pg.draw.rect(screen, (0, 0, 0), bg_rect)
             screen.blit(surf, (bg_rect.x + padding, bg_rect.y + padding))
 
-    def setup(self, player_mon: dict, wild_mon: dict,bag):
+    def setup(self, player_mon: dict, wild_mon: dict, bag, on_caught=None):
+        self.on_caught = on_caught
         #每次進戰鬥都重置 run confirm 視窗
         self.run_confirm_open = False
         self.run_prev_state = None      
@@ -475,12 +478,17 @@ class BushScene(Scene):
             new_mon["hp"] = new_mon.get("max_hp", new_mon.get("hp", 1))
 
             self.bag.add_monster(new_mon)
+            
+            if self.on_caught is not None:
+                self.on_caught()
+                self.on_caught = None
 
             self.state = "caught"
             self.message_text = (
                 f"You caught {self.wild_mon['name']}! "
                 "It has been added into your bag. "
             )
+            
         else:
             # 捕捉失敗 → 野怪等一下打你
             self.state = "catch_fail"

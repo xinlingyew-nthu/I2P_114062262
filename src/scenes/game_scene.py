@@ -19,6 +19,7 @@ from src.sprites import Sprite
 from typing import override
 from src.scenes.battle_scene import BattleScene
 from src.scenes.bush_scene import BushScene
+from src.scenes.dialog_scene import DialogScene
 from collections import deque
 
 
@@ -36,6 +37,9 @@ class GameScene(Scene):
             Logger.error("Failed to load game manager")
             exit(1)
         self.game_manager = manager
+        if not hasattr(self.game_manager, "quests") or self.game_manager.quests is None:
+            self.game_manager.quests = {}
+        self.game_manager.quests.setdefault("beach_missing_mon", {"accepted": False, "caught": False})
 
         # tile = GameSettings.TILE_SIZE
         # self.bush_zones: dict[str, list[pg.Rect]] = {
@@ -238,8 +242,25 @@ class GameScene(Scene):
         self._nav_last_map: str | None = None      # 用来侦测换地图
         self._nav_last_player_tile: tuple[int,int] | None = None
 
+        #dialog
+        self.dialog_open = False
+        self.dialog_lines = []
+        self.dialog_idx = 0
+        self.dialog_on_finish = None
+
     def checkbox_check(self):
-        self.is_muted = not self.is_muted
+        new_muted = not self.is_muted
+        if new_muted == self.is_muted:
+            return  # ✅ 没变化就别动音频
+
+        self.is_muted = new_muted
+        GameSettings.MUTE_BGM = self.is_muted
+
+        if self.is_muted:
+            sound_manager.pause_all()
+        else:
+            sound_manager.resume_all()
+            sound_manager.set_bgm_volume(self.slider_value / 100)
         img=(
         "UI/raw/UI_Flat_ToggleOn02a.png" if self.is_muted else "UI/raw/UI_Flat_ToggleOff02a.png"            
         )
@@ -401,6 +422,20 @@ class GameScene(Scene):
         self._nav_last_player_tile = None
         self.nav_open = False   # 顺便关掉nav面板（你也可以不关）
         self.add_toast("Nav cancelled")
+
+    def _open_dialog(self, lines, on_finish=None):
+        self.dialog_open = True
+        self.dialog_lines = lines
+        self.dialog_idx = 0
+        self.dialog_on_finish = on_finish
+
+    def _advance_dialog(self):
+        self.dialog_idx += 1
+        if self.dialog_idx >= len(self.dialog_lines):
+            self.dialog_open = False
+            if self.dialog_on_finish:
+                self.dialog_on_finish()
+            self.dialog_on_finish = None
 
     def _recompute_nav_path(self):
         if self.nav_goal is None:
@@ -620,7 +655,40 @@ class GameScene(Scene):
         self._nav_last_map = cur_key
         if self.game_manager.player:
             self._nav_last_player_tile = self._player_tile(self.game_manager.player)
+
+    def _build_pikachu(self) -> dict:
+        return {
+            "id": 999,
+            "name": "Pikachu",
+            "element": "electric",
+            "level": 5,
+            "max_hp": 200,
+            "hp": 200,
+            "attack": 30,
+            "defense": 10,
+            "sprite_path": "element/pikachu.png",
+
+            "battle_idle_path": None,
+            "battle_attack_path": None,
+
+            "evolve_to": None,
+        }
+    def _remove_monster_by_id(self, mon_id: int) -> bool:
+        bag = self.game_manager.bag
+        before = len(bag._monsters_data)
+        bag._monsters_data = [m for m in bag._monsters_data if m.get("id") != mon_id]
+        return len(bag._monsters_data) != before
     
+    def _near_npc(self, npc, dist_tiles: float = 1.5) -> bool:
+        if self.game_manager.player is None:
+            return False
+        t = GameSettings.TILE_SIZE
+        pr = self.game_manager.player.animation.rect
+        nr = npc.animation.rect
+        dx = (pr.centerx - nr.centerx) / t
+        dy = (pr.centery - nr.centery) / t
+        return dx*dx + dy*dy <= dist_tiles*dist_tiles
+            
 
     @override
     def enter(self) -> None:
@@ -661,6 +729,46 @@ class GameScene(Scene):
         # Check if there is assigned next scene
         self.shop.update_timer(dt)
         self.game_manager.try_switch_map()
+
+        if self.dialog_open:
+            if input_manager.key_pressed(pg.K_SPACE):
+                self._advance_dialog()
+            return
+        
+        pressed_e = input_manager.key_pressed(pg.K_e)
+        cur_map = self.game_manager.current_map.path_name
+        player = self.game_manager.player
+        
+        # 修复：确保任务字典存在，防止 KeyError
+        q = self.game_manager.quests.setdefault("beach_missing_mon", {"accepted": False, "caught": False})
+
+        if player:
+            player_rect = player.animation.rect
+            t = GameSettings.TILE_SIZE
+            # 定义故事剧情触发的草丛坐标 (4, 3)
+            story_rect = pg.Rect(4 * t, 3 * t, t, t)
+
+            # 1. 处理与 NPC 对话 (坐标 15, 9 附近)
+            pt = self._player_tile(player)
+            if cur_map == "beach.tmx" and abs(pt[0] - 15) <= 1 and abs(pt[1] - 9) <= 1:
+                if pressed_e:
+                    dialog_scene = scene_manager.get_scene("dialog")
+                    if isinstance(dialog_scene, DialogScene):
+                        if not q["accepted"]:
+                            def accept(): q["accepted"] = True
+                            dialog_scene.setup([
+                                "Hey kid! Don't just stand there staring at the ocean!",
+                                "I've lost my partner... He's yellow, fuzzy, and sparks with joy.",
+                                "Last seen near the tall grass at (4, 3). Mind checking it out?",
+                                "Try not to get electrocuted, alright?"], on_finish=accept)
+                        elif not q["caught"]:
+                            dialog_scene.setup(["He's still out there! I can hear the 'Pika' echoes!"])
+                        else:
+                            dialog_scene.setup(["You actually found him! You're a legend, kid!"])
+                        scene_manager.change_scene("dialog")
+                    return
+
+
 
         cur_key = self.game_manager.current_map.path_name
         if self.nav_goal is not None:
@@ -729,6 +837,7 @@ class GameScene(Scene):
             enemy.update(dt)
         
 
+
         #bush interaction
         player = self.game_manager.player
         self.in_bush_zone = False
@@ -739,28 +848,86 @@ class GameScene(Scene):
                     self.in_bush_zone =True
                     self.bush_warning.rect.centerx = player_rect.centerx
                     self.bush_warning.rect.bottom = player_rect.top - 10
+                    break
 
-                    if input_manager.key_pressed(pg.K_e):
-                        bag = self.game_manager.bag
-                        # 從背包選一隻還活著的當 player_mon
-                        player_mon = None
-                        for m in bag._monsters_data:
-                            if m["hp"] > 0:
-                                player_mon = m
-                                break
-                        if player_mon is None:
-                            return  # 沒怪就不要進戰鬥
-                        if MONSTER_DATA:
-                            proto = random.choice(MONSTER_DATA)
-                            level = random.randint(0, 50)
-                            wild_mon = build_monster(proto, level)                  
+                    # if pressed_e:
+                    #     bag = self.game_manager.bag
+                    #     # 從背包選一隻還活著的當 player_mon
+                    #     player_mon = None
+                    #     for m in bag._monsters_data:
+                    #         if m["hp"] > 0:
+                    #             player_mon = m
+                    #             break
+                    #     if player_mon is None:
+                    #         return  # 沒怪就不要進戰鬥
+                    #     # if MONSTER_DATA:
+                    #     #     proto = random.choice(MONSTER_DATA)
+                    #     #     level = random.randint(0, 50)
+                    #     #     wild_mon = build_monster(proto, level)                  
+                    #     q = self.game_manager.quests.setdefault("beach_missing_mon", {"accepted": False, "caught": False})
 
-                        bush_scene = scene_manager.get_scene("bush")
-                        if isinstance(bush_scene, BushScene):
-                            bush_scene.setup(player_mon, wild_mon, self.game_manager.bag)
+                    #     cur_map = self.game_manager.current_map.path_name
 
-                        scene_manager.change_scene("bush")
-           
+        if self.in_bush_zone and pressed_e:
+            bag = self.game_manager.bag
+            player_mon = next((m for m in bag._monsters_data if m["hp"] > 0), None)
+            if player_mon is None:
+                return
+
+            q = self.game_manager.quests.setdefault("beach_missing_mon", {"accepted": False, "caught": False})
+            cur_map = self.game_manager.current_map.path_name
+
+            t = GameSettings.TILE_SIZE
+            story_rect = pg.Rect(4 * t, 3 * t, t, t)
+            player_rect = self.game_manager.player.animation.rect
+
+            # ====== (1) 剧情草丛：beach (4,3) + 已接任务 + 未完成 ======
+            if cur_map == "beach.tmx" and q["accepted"] and (not q["caught"]) and player_rect.colliderect(story_rect):
+
+                def _start_story_battle():
+                    wild_mon = self._build_pikachu()
+
+                    def _mark_beach_mon_caught():
+                        q["caught"] = True
+                        self.add_toast("Quest updated: Pikachu found!")
+
+                    bush_scene = scene_manager.get_scene("bush")
+                    if isinstance(bush_scene, BushScene):
+                        bush_scene.setup(player_mon, wild_mon, bag, on_caught=_mark_beach_mon_caught)
+                    scene_manager.change_scene("bush")
+
+                dialog_scene = scene_manager.get_scene("dialog")
+                if isinstance(dialog_scene, DialogScene):
+                    dialog_scene.setup(
+                        ["Pikachu", "Did you hear pikachu?", "Lets catch it!"],
+                        on_finish=_start_story_battle
+                    )
+                    scene_manager.change_scene("dialog")
+                return
+
+            # ====== (2) 普通草丛：随机遇敌（你原本的功能要补回来） ======
+            proto = random.choice(MONSTER_DATA)
+            level = random.randint(0, 50)
+            wild_mon = build_monster(proto, level)
+
+            bush_scene = scene_manager.get_scene("bush")
+            if isinstance(bush_scene, BushScene):
+                bush_scene.setup(player_mon, wild_mon, bag)
+            scene_manager.change_scene("bush")
+            return
+
+            # bush_scene = scene_manager.get_scene("bush")
+            # def _mark_beach_mon_caught():
+            #     q["caught"] = True
+            #     self.add_toast("Quest updated: Pikachu found!")
+
+            # bush_scene = scene_manager.get_scene("bush")
+
+            # if isinstance(bush_scene, BushScene):
+            #     bush_scene.setup(player_mon, wild_mon, self.game_manager.bag, on_caught=_mark_beach_mon_caught)
+
+            # scene_manager.change_scene("bush")
+
         # Update others
         
         if self.game_manager.player is not None and self.online_manager is not None:
@@ -959,7 +1126,7 @@ class GameScene(Scene):
             cr.x = fx + fw - 50
             cr.y = fy + 15
             self.nav_close_button.draw(screen)
-            
+
             # cancel nav (back)
             br = self.nav_cancel_button.hitbox
             br.x = fx + fw - 95   # X 左边
@@ -1112,7 +1279,20 @@ class GameScene(Scene):
                 hint_rect = hint.get_rect()
                 hint_rect.midbottom = (screen_rect.centerx, screen_rect.top - 40)
                 screen.blit(hint, hint_rect)
-  
+        #quest
+        if self.game_manager.current_map.path_name == "beach.tmx" and self.game_manager.player:
+            pt = self._player_tile(self.game_manager.player)
+            if abs(pt[0]-15) <= 1 and abs(pt[1]-9) <= 1:
+                hint = self.small_word.render("PRESS E TO TALK", True, (255,255,255))
+                screen.blit(hint, (20, 80))
+
+        q = self.game_manager.quests.get("beach_missing_mon", None)
+        if q and q.get("accepted") and (not q.get("caught")):
+            if self.game_manager.current_map.path_name == "beach.tmx" and self.game_manager.player:
+                pt = self._player_tile(self.game_manager.player)
+                if pt == (4, 3):
+                    hint = self.small_word.render("PRESS E TO CHECK BUSH", True, (255,255,255))
+                    screen.blit(hint, (20, 110))
         
         if self.online_manager and self.game_manager.player:
             list_online = self.online_manager.get_list_players()
@@ -1140,6 +1320,15 @@ class GameScene(Scene):
             camera_rect=getattr(self, "camera_rect", None)
         )
         self._draw_toasts(screen)
+
+        #quest
+        q = self.game_manager.quests.get("beach_missing_mon", None)
+        if q and q.get("accepted") and (not q.get("caught")):
+            quest_surf = self.word.render("Quest: Finding Pokemon", True, (255, 255, 255))
+            bg = pg.Surface((quest_surf.get_width()+20, quest_surf.get_height()+14), pg.SRCALPHA)
+            bg.fill((0,0,0,160))
+            screen.blit(bg, (20, GameSettings.SCREEN_HEIGHT - 60))
+            screen.blit(quest_surf, (30, GameSettings.SCREEN_HEIGHT - 53))
 
         #draw arrow
 
@@ -1188,3 +1377,4 @@ class GameScene(Scene):
 
                     acc = (dist + acc) - seg_len
                     last = (x2, y2)
+            
