@@ -67,6 +67,11 @@ class GameScene(Scene):
                 send_callback=self.online_manager.send_chat,
                 get_messages=self.online_manager.get_recent_chat
             )
+            #chatbubble
+            self._chat_bubbles: dict[int, tuple[str, float]] = {}   # pid -> (text, expire_time)
+            self._bubble_lifetime = 3.0                        # seconds
+            self._bubble_font = pg.font.Font("assets/fonts/Minecraft.ttf", 16)
+            self._last_chat_id_seen = 0
         else:
             self.online_manager = None
             self._chat_overlay = None
