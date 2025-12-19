@@ -146,7 +146,24 @@ class ChatOverlay(UIComponent):
 
     def draw(self, screen: pg.Surface) -> None:
         # Always draw recent messages faintly, even when closed
-        msgs = self._get_messages(8) if self._get_messages else []
+        msgs: list[dict] = []
+        if self._get_messages:
+            try:
+                msgs = list(self._get_messages(200))  # 先拿多一点，避免漏
+            except Exception:
+                msgs = []
+        seen = set()
+        uniq = []
+        for m in msgs:
+            mid = int(m.get("id", 0))
+            if mid in seen:
+                continue
+            seen.add(mid)
+            uniq.append(m)
+
+        uniq.sort(key=lambda x: int(x.get("id", 0)))
+        msgs = uniq[-4:]
+
         sw, sh = screen.get_size()
         x = 10
         y = sh - 100
@@ -179,7 +196,6 @@ class ChatOverlay(UIComponent):
         #Text
         txt = self._input_text
         text_surf = self._font_input.render(txt, True, (255, 255, 255))
-        _ = screen.blit(text_surf, (x + 8, box_y + 4))
         _ = screen.blit(text_surf, (x + 8, box_y + 4))
         #Caret
         if self._cursor_visible:

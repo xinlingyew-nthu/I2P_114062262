@@ -57,6 +57,7 @@ class OnlineManager:
         self._chat_messages = deque(maxlen=200)
         self._last_chat_id = 0
 
+
         Logger.info("OnlineManager initialized")
 
     def enter(self):

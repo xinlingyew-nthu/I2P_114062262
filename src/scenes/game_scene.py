@@ -63,18 +63,32 @@ class GameScene(Scene):
             self.online_move_timer: dict[int, float] = {}
             self.online_facing: dict[int, str] = {} 
             self.sprite_online = Sprite("character/ow1.png", (48, 48))
-            self._chat_overlay = ChatOverlay(
-                send_callback=self.online_manager.send_chat,
-                get_messages=self.online_manager.get_recent_chat
-            )
-            #chatbubble
-            self._chat_bubbles: dict[int, tuple[str, float]] = {}   # pid -> (text, expire_time)
-            self._bubble_lifetime = 3.0                        # seconds
+            self._chat_bubbles: dict[int, tuple[str, float]] = {}
+            self._bubble_lifetime = 3.0
             self._bubble_font = pg.font.Font("assets/fonts/Minecraft.ttf", 16)
             self._last_chat_id_seen = 0
-        else:
-            self.online_manager = None
-            self._chat_overlay = None
+
+            # wrapper：发送成功就立刻显示本地 bubble
+            def _send_chat_and_bubble(txt: str) -> bool:
+                if not self.online_manager:
+                    return False
+                ok = False
+                try:
+                    ok = self.online_manager.send_chat(txt)
+                except Exception:
+                    ok = False
+
+                if ok:
+                    now = time.monotonic()
+                    local_pid = int(self.online_manager.player_id)
+                    self._chat_bubbles[local_pid] = (txt, now + self._bubble_lifetime)
+
+                return ok
+
+            self._chat_overlay = ChatOverlay(
+                send_callback=_send_chat_and_bubble,
+                get_messages=self.online_manager.get_recent_chat
+            )
 
         #控制overlay的
         self.overlay_open=False
@@ -295,6 +309,22 @@ class GameScene(Scene):
             # if sound_manager.current_bgm is not None:
             #     sound_manager.current_bgm.set_volume(self.slider_value/100)
             sound_manager.set_bgm_volume(self.slider_value/100)    
+    #overlay 优先级
+    def _active_modal(self) -> str | None:
+        # 越上层优先级越前面
+        if self._chat_overlay and self._chat_overlay.is_open:
+            return "chat"
+        if self.dialog_open:
+            return "dialog"
+        if self.shop.overlay_open:
+            return "shop"
+        if self.nav_open:
+            return "nav"
+        if self.overlaybag_open:
+            return "bag"
+        if self.overlay_open:
+            return "setting"
+        return None
 
         #  打開 overlay        
     def open_overlay(self):
@@ -765,6 +795,94 @@ class GameScene(Scene):
             return "left"
         else:
             return "right"
+    def _draw_chat_bubble_for_pos(
+        self,
+        screen: pg.Surface,
+        camera: PositionCamera,
+        world_pos: Position,
+        text: str,
+        font: pg.font.Font
+    ):
+        # world -> screen
+        p = camera.transform_position_as_position(world_pos)
+
+        # above player's head
+        x = int(p.x) +30
+        y = int(p.y)   # 你可以调这个高度
+
+        # 3) measure text & bubble size
+        txt = font.render(text, True, (0, 0, 0))
+        pad_x, pad_y = 10, 6
+        bw = txt.get_width() + pad_x * 2
+        bh = txt.get_height() + pad_y * 2
+
+        rect = pg.Rect(0, 0, bw, bh)
+        rect.midbottom = (x, y)
+
+        # bubble box
+        bg = pg.Surface((bw, bh), pg.SRCALPHA)
+        pg.draw.rect(bg, (255, 255, 255, 230), bg.get_rect(), border_radius=10)
+        pg.draw.rect(bg, (0, 0, 0, 255), bg.get_rect(), width=2, border_radius=10)
+        screen.blit(bg, rect.topleft)
+
+        # tail
+        tip_x = rect.centerx
+        tip_y = rect.bottom
+        tri = [(tip_x - 8, tip_y), (tip_x + 8, tip_y), (tip_x, tip_y + 10)]
+        pg.draw.polygon(screen, (255, 255, 255), tri)
+        pg.draw.polygon(screen, (0, 0, 0), tri, width=2)
+
+        # text
+        screen.blit(txt, (rect.x + pad_x, rect.y + pad_y))
+
+    #bubble 
+    def _draw_chat_bubbles(self, screen: pg.Surface, camera: PositionCamera) -> None:
+        if not self.online_manager:
+            return
+
+        # REMOVE EXPIRED BUBBLES
+        now = time.monotonic()
+        expired = [pid for pid, (_, ts) in self._chat_bubbles.items() if ts <= now]
+        for pid in expired:
+            self._chat_bubbles.pop(pid, None)
+
+        if not self._chat_bubbles:
+            return
+
+        # DRAW LOCAL PLAYER'S BUBBLE
+        local_pid = int(self.online_manager.player_id)
+        if self.game_manager.player and local_pid in self._chat_bubbles:
+            text, _ = self._chat_bubbles[local_pid]
+            self._draw_chat_bubble_for_pos(
+                screen,
+                camera,
+                self.game_manager.player.position,
+                text,
+                self._bubble_font
+            )
+
+        # DRAW OTHER PLAYERS' BUBBLES
+        for pid, (text, _) in self._chat_bubbles.items():
+            if pid == local_pid:
+                continue
+
+            # only visible players on this map
+            p_list = self.online_manager.get_list_players()
+            pinfo = next((p for p in p_list if int(p.get("id", -1)) == pid), None)
+            if not pinfo or pinfo.get("map") != self.game_manager.current_map.path_name:
+                continue
+
+            pos_xy = self.online_last_pos.get(pid, None)
+            if not pos_xy:
+                continue
+            px, py = pos_xy
+            self._draw_chat_bubble_for_pos(
+                screen,
+                camera,
+                Position(px, py),
+                text,
+                self._bubble_font
+            )
             
 
     @override
@@ -807,26 +925,79 @@ class GameScene(Scene):
         self.shop.update_timer(dt)
         self.game_manager.try_switch_map()
 
+        active = self._active_modal()
+
+        # 1) dialog：只处理 dialog
         if self.dialog_open:
             if input_manager.key_pressed(pg.K_SPACE):
                 self._advance_dialog()
             return
-        # ===== Chat Overlay (toggle + input capture) =====
+
+        # 2) shop：只处理 shop
+        if self.shop.overlay_open:
+            self.shop.update(dt)
+            if input_manager.key_pressed(pg.K_ESCAPE):
+                self.close_shop()   # 或 self.shop.close_overlay()
+            return
+
+        # 3) nav：只处理 nav
+        if self.nav_open:
+            self.nav_close_button.update(dt)
+            self.nav_cancel_button.update(dt)
+            for b in self.nav_place_buttons:
+                b.update(dt)
+
+            if input_manager.key_pressed(pg.K_ESCAPE):
+                self._close_nav()
+            return
+
+        # 4) bag：只处理 bag
+        if self.overlaybag_open:
+            self.overlay_button_back.update(dt)
+            self.game_manager.bag.update(dt)
+
+            if input_manager.mouse_pressed(1):
+                mouse_pos = input_manager.mouse_pos
+                result = self.game_manager.bag.handle_click(mouse_pos)
+                if result:
+                    msg = result.get("message", "")
+                    if msg:
+                        self.add_toast(msg)
+
+            if input_manager.key_pressed(pg.K_ESCAPE):
+                self.close_overlay()
+            return
+
+        # 5) setting：只处理 setting
+        if self.overlay_open:
+            self.overlay_button_back.update(dt)
+            self.checkbox_button.update(dt)
+            self.save_button.update(dt)
+            self.load_button.update(dt)
+
+            if input_manager.key_pressed(pg.K_ESCAPE):
+                self.close_overlay()
+            return
+        
+        active = self._active_modal()
+        #chat
         if self._chat_overlay:
-            # 用 T 开关
-            if input_manager.key_pressed(pg.K_t) and not self._ui_modal_open():
-                if self._chat_overlay.is_open:
-                    self._chat_overlay.close()
-                else:
+            # 用 T 开
+            if input_manager.key_pressed(pg.K_t) and active is None:
+                if not self._chat_overlay.is_open:
                     self._chat_overlay.open()
+                    active = "chat"
+
 
             # 如果正在打字：只让 chat 处理输入，别让游戏其他系统读到按键
-            if self._chat_overlay.is_open:
-                self._chat_overlay.update(dt)
-                return
-            else:
-                # 没开的时候也让它更新一下（光标计时/之类）
-                self._chat_overlay.update(dt)
+
+            self._chat_overlay.update(dt)
+
+        if self._chat_overlay.is_open:
+            if input_manager.key_pressed(pg.K_ESCAPE):
+                self._chat_overlay.close()
+            return  
+        
 
         pressed_e = input_manager.key_pressed(pg.K_e)
         cur_map = self.game_manager.current_map.path_name
@@ -887,13 +1058,6 @@ class GameScene(Scene):
                     # anim.frame_idx = 0
 
                 self.online_last_pos[pid] = (wx, wy)
-
-            # 清掉离线的
-            for pid in list(self.online_anims.keys()):
-                if pid not in alive:
-                    self.online_anims.pop(pid, None)
-                    self.online_last_pos.pop(pid, None)
-                    self.online_facing.pop(pid, None)
         
         # 修复：确保任务字典存在，防止 KeyError
         q = self.game_manager.quests.setdefault("beach_missing_mon", {"accepted": False, "caught": False})
@@ -915,7 +1079,7 @@ class GameScene(Scene):
                             dialog_scene.setup([
                                 "Hey kid! Don't just stand there staring at the ocean!",
                                 "I've lost my partner... He's yellow, fuzzy, and sparks with joy.",
-                                "Last seen near the tall grass at (4, 3). Mind checking it out?",
+                                "Last seen near the tree. Mind checking it out?",
                                 "Try not to get electrocuted, alright?"], on_finish=accept)
                         elif not q["caught"]:
                             dialog_scene.setup(["He's still out there! I can hear the 'Pika' echoes!"])
@@ -980,9 +1144,13 @@ class GameScene(Scene):
 
 
         #更新位置
-        self.overlay_button.update(dt)
-        self.bag_button.update(dt)
-        self.nav_button.update(dt)
+        active = self._active_modal()
+
+        #只有完全没有 modal 打开时，才允许点右上角按钮
+        if active is None:
+            self.overlay_button.update(dt)
+            self.bag_button.update(dt)
+            self.nav_button.update(dt)
         if self.nav_button.on_click:
             pass
 
@@ -1055,7 +1223,7 @@ class GameScene(Scene):
                 dialog_scene = scene_manager.get_scene("dialog")
                 if isinstance(dialog_scene, DialogScene):
                     dialog_scene.setup(
-                        ["Pikachu", "Did you hear pikachu?", "Lets catch it!"],
+                        ["Pika... Pika", "Did you hear pikachu?", "Lets catch it!"],
                         on_finish=_start_story_battle
                     )
                     scene_manager.change_scene("dialog")
@@ -1092,6 +1260,32 @@ class GameScene(Scene):
                 self.game_manager.player.position.y,
                 self.game_manager.current_map.path_name
             )
+
+        #buble chat
+        if self.online_manager:
+            try:
+                msgs = self.online_manager.get_recent_chat(50)
+                max_id = self._last_chat_id_seen
+                now = time.monotonic()
+
+                for m in msgs:
+                    mid = int(m.get("id", 0))
+                    if mid <= self._last_chat_id_seen:
+                        continue
+
+                    # TA hint uses "from"; your server might use "pid"
+                    sender = int(m.get("from", m.get("pid", -1)))
+                    text = str(m.get("text", ""))
+
+                    if sender >= 0 and text:
+                        self._chat_bubbles[sender] = (text, now + self._bubble_lifetime)
+
+                    if mid > max_id:
+                        max_id = mid
+
+                self._last_chat_id_seen = max_id
+            except Exception:
+                pass
         if self.online_manager:
             alive = set()
             for p in self.online_manager.get_list_players():
@@ -1108,48 +1302,48 @@ class GameScene(Scene):
                 self.overlay_button_back.on_click()
             else:
                 self.open_overlay()
-        #shop
-        if self.shop.overlay_open:
-            self.shop.update(dt)
-            return
+        # #shop
+        # if self.shop.overlay_open:
+        #     self.shop.update(dt)
+        #     return
          
-        #bag
-        if input_manager.key_pressed(pg.K_b):
-            if not self.overlay_open and not self.shop.overlay_open:
-                self.open_bag_overlay()
+        # #bag
+        # if input_manager.key_pressed(pg.K_b):
+        #     if not self.overlay_open and not self.shop.overlay_open:
+        #         self.open_bag_overlay()
 
-        if self.nav_open:
-            self.nav_close_button.update(dt)
-            self.nav_cancel_button.update(dt)
-            for b in self.nav_place_buttons:
-                b.update(dt)
-            if input_manager.key_pressed(pg.K_ESCAPE):
-                self._close_nav()
+        # if self.nav_open:
+        #     self.nav_close_button.update(dt)
+        #     self.nav_cancel_button.update(dt)
+        #     for b in self.nav_place_buttons:
+        #         b.update(dt)
+        #     if input_manager.key_pressed(pg.K_ESCAPE):
+        #         self._close_nav()
                     
-        if self.overlaybag_open:
-            self.overlay_button_back.update(dt)
-            self.game_manager.bag.update(dt)
-            if input_manager.mouse_pressed(1):
-                mouse_pos = input_manager.mouse_pos
-                result = self.game_manager.bag.handle_click(mouse_pos)
+        # if self.overlaybag_open:
+        #     self.overlay_button_back.update(dt)
+        #     self.game_manager.bag.update(dt)
+        #     if input_manager.mouse_pressed(1):
+        #         mouse_pos = input_manager.mouse_pos
+        #         result = self.game_manager.bag.handle_click(mouse_pos)
 
-                # 讓 Bag 回傳的訊息顯示在右下角 toast（跟 Bush 一樣）
-                if result is not None:
-                    msg = result.get("message", "")
-                    if msg:
-                        self.add_toast(msg)
+        #         # 讓 Bag 回傳的訊息顯示在右下角 toast（跟 Bush 一樣）
+        #         if result is not None:
+        #             msg = result.get("message", "")
+        #             if msg:
+        #                 self.add_toast(msg)
 
             # 更新右上角的 Back 按鈕（ESC 其實也會走 overlay_button_back.on_click）
-            self.overlay_button_back.update(dt)
+            # self.overlay_button_back.update(dt)
 
-            #Bag 開著時，不要再更新後面地圖 / 設定 / shop 之類的
-            return            
-        #setting
-        if self.overlay_open:
-            self.overlay_button_back.update(dt)
-            self.checkbox_button.update(dt)
-            self.save_button.update(dt)
-            self.load_button.update(dt)
+        #     #Bag 開著時，不要再更新後面地圖 / 設定 / shop 之類的
+        #     return            
+        # #setting
+        # if self.overlay_open:
+        #     self.overlay_button_back.update(dt)
+        #     self.checkbox_button.update(dt)
+        #     self.save_button.update(dt)
+        #     self.load_button.update(dt)
         # if input_manager.key_pressed(pg.K_b):
         #     if not self.overlay_open:
         #         self.open_bag_overlay()
@@ -1274,6 +1468,9 @@ class GameScene(Scene):
                 anim = self.online_anims.get(pid)
                 if anim:
                     anim.draw(screen, cam)
+        #bubble chat
+        if self.online_manager and self.game_manager.player:
+            self._draw_chat_bubbles(screen, camera)       
 
         #畫出右上角的按鈕
         self.overlay_button.draw(screen)
