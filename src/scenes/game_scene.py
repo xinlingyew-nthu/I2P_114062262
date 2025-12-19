@@ -7,6 +7,7 @@ import copy
 from src.scenes.scene import Scene
 from src.data.shop import Shop
 from src.core import GameManager, OnlineManager
+from src.sprites import Animation
 from src.utils import Logger, PositionCamera, GameSettings, Position,load_img
 from src.interface.components.button import Button #加按鈕的class
 from src.utils.minimap import MiniMap
@@ -21,6 +22,7 @@ from src.scenes.battle_scene import BattleScene
 from src.scenes.bush_scene import BushScene
 from src.scenes.dialog_scene import DialogScene
 from collections import deque
+from src.interface.components.chat_overlay import ChatOverlay
 
 
 class GameScene(Scene):
@@ -55,9 +57,19 @@ class GameScene(Scene):
         # Online Manager
         if GameSettings.IS_ONLINE:
             self.online_manager = OnlineManager()
+            self.online_sprites: dict[int, Sprite] = {}
+            self.online_anims: dict[int, Animation] = {}
+            self.online_last_pos: dict[int, tuple[float,float]] = {}
+            self.online_move_timer: dict[int, float] = {}
+            self.online_facing: dict[int, str] = {} 
+            self.sprite_online = Sprite("character/ow1.png", (48, 48))
+            self._chat_overlay = ChatOverlay(
+                send_callback=self.online_manager.send_chat,
+                get_messages=self.online_manager.get_recent_chat
+            )
         else:
             self.online_manager = None
-        self.sprite_online = Sprite("ingame_ui/options1.png", (GameSettings.TILE_SIZE, GameSettings.TILE_SIZE))
+            self._chat_overlay = None
 
         #控制overlay的
         self.overlay_open=False
@@ -722,6 +734,32 @@ class GameScene(Scene):
         bg_rect = bg.get_rect(center=(feet_screen.x, feet_screen.y + y_offset))
         screen.blit(bg, bg_rect.topleft)
         screen.blit(surf, (bg_rect.x + pad, bg_rect.y + pad))
+
+    def _online_world_pos(self, p: dict) -> tuple[float, float]:
+        """把 online 回来的 x,y 转成世界像素座标(px)"""
+        x = float(p["x"])
+        y = float(p["y"])
+
+        # 自动判断：如果数值很小(例如 < 200)，通常是 tile；否则是 pixel
+        # 你的地图像素通常会 > 200
+        if x < 200 and y < 200:
+            x *= GameSettings.TILE_SIZE
+            y *= GameSettings.TILE_SIZE
+        return x, y
+
+    def _dir_from_delta(self, dx: float, dy: float, last_facing: str) -> str:
+        if abs(dx) < 1e-3 and abs(dy) < 1e-3:
+            return last_facing
+
+        # 模仿你 Player：先看 y，再看 x
+        if dy < 0:
+            return "up"
+        elif dy > 0:
+            return "down"
+        elif dx < 0:
+            return "left"
+        else:
+            return "right"
             
 
     @override
@@ -768,10 +806,89 @@ class GameScene(Scene):
             if input_manager.key_pressed(pg.K_SPACE):
                 self._advance_dialog()
             return
-        
+        # ===== Chat Overlay (toggle + input capture) =====
+        if self._chat_overlay:
+            # 用 T 开关
+            if input_manager.key_pressed(pg.K_t) and not self._ui_modal_open():
+                if self._chat_overlay.is_open:
+                    self._chat_overlay.close()
+                else:
+                    self._chat_overlay.open()
+
+            # 如果正在打字：只让 chat 处理输入，别让游戏其他系统读到按键
+            if self._chat_overlay.is_open:
+                self._chat_overlay.update(dt)
+                return
+            else:
+                # 没开的时候也让它更新一下（光标计时/之类）
+                self._chat_overlay.update(dt)
+
         pressed_e = input_manager.key_pressed(pg.K_e)
         cur_map = self.game_manager.current_map.path_name
         player = self.game_manager.player
+
+        #online
+        if self.online_manager and self.game_manager.player:
+            alive: set[int] = set()
+
+            for p in self.online_manager.get_list_players():
+                pid = int(p["id"])
+                alive.add(pid)
+
+                # 创建 anim
+                if pid not in self.online_anims:
+                    self.online_anims[pid] = Animation(
+                        "character/ow1.png",
+                        ["down", "left", "right", "up"], 4,
+                        (GameSettings.TILE_SIZE, GameSettings.TILE_SIZE)
+                    )
+                    wx, wy = self._online_world_pos(p)
+                    self.online_last_pos[pid] = (wx, wy)
+                    self.online_facing[pid] = "down"
+
+                # 不同地图：不更新动画（保留上次状态）
+                if p.get("map") != self.game_manager.current_map.path_name:
+                    continue
+
+                # 统一成世界像素座标
+                wx, wy = self._online_world_pos(p)
+
+                lastx, lasty = self.online_last_pos.get(pid, (wx, wy))
+                dx, dy = wx - lastx, wy - lasty
+
+                # moving 判定：用“像素阈值”，不要用 0.001（太小）
+                moved_now = (abs(dx) + abs(dy)) > 0.5
+                if moved_now:
+                    self.online_move_timer[pid] = 0.12  # 0.10~0.20 自己调
+                else:
+                    self.online_move_timer[pid] = max(0.0, self.online_move_timer.get(pid, 0.0) - dt)
+
+                moving = self.online_move_timer.get(pid, 0.0) > 0.0
+
+                # facing：模仿你 Player（y优先）
+                facing = self._dir_from_delta(dx, dy, self.online_facing.get(pid, "down"))
+                self.online_facing[pid] = facing
+
+                anim = self.online_anims[pid]
+                anim.switch(facing)
+                anim.update_pos(Position(wx, wy))
+
+                if moving:
+                    anim.update(dt)
+                else:
+                    # 停在第一帧
+                    anim.accumulator = 0.0
+                    # 如果你 Animation 还有 frame_idx/current_frame 之类，也可以一起归零
+                    # anim.frame_idx = 0
+
+                self.online_last_pos[pid] = (wx, wy)
+
+            # 清掉离线的
+            for pid in list(self.online_anims.keys()):
+                if pid not in alive:
+                    self.online_anims.pop(pid, None)
+                    self.online_last_pos.pop(pid, None)
+                    self.online_facing.pop(pid, None)
         
         # 修复：确保任务字典存在，防止 KeyError
         q = self.game_manager.quests.setdefault("beach_missing_mon", {"accepted": False, "caught": False})
@@ -915,7 +1032,7 @@ class GameScene(Scene):
             story_rect = pg.Rect(4 * t, 3 * t, t, t)
             player_rect = self.game_manager.player.animation.rect
 
-            # ====== (1) 剧情草丛：beach (4,3) + 已接任务 + 未完成 ======
+            #(1) 剧情草丛：beach (4,3) + 已接任务 + 未完成
             if cur_map == "beach.tmx" and q["accepted"] and (not q["caught"]) and player_rect.colliderect(story_rect):
 
                 def _start_story_battle():
@@ -939,7 +1056,7 @@ class GameScene(Scene):
                     scene_manager.change_scene("dialog")
                 return
 
-            # ====== (2) 普通草丛：随机遇敌（你原本的功能要补回来） ======
+            #(2) 普通草丛：随机遇敌（你原本的功能要补回来）
             proto = random.choice(MONSTER_DATA)
             level = random.randint(1, 50)
             wild_mon = build_monster(proto, level)
@@ -970,6 +1087,16 @@ class GameScene(Scene):
                 self.game_manager.player.position.y,
                 self.game_manager.current_map.path_name
             )
+        if self.online_manager:
+            alive = set()
+            for p in self.online_manager.get_list_players():
+                pid = int(p["id"])
+                alive.add(pid)
+                if pid not in self.online_anims:
+                    self.online_anims[pid] = Animation(
+                        "character/ow1.png",
+                        ["down", "left", "right", "up"], 4,
+                        (GameSettings.TILE_SIZE, GameSettings.TILE_SIZE))
         #esc
         if  (not self.shop.overlay_open) and input_manager.key_pressed(pg.K_ESCAPE):
             if self.overlaybag_open or self.overlay_open:
@@ -1132,6 +1259,16 @@ class GameScene(Scene):
 
         for enemy in self.game_manager.current_enemy_trainers:
             enemy.draw(screen, camera)
+        #online manager
+        if (not self._ui_modal_open()) and self.online_manager and self.game_manager.player:
+            cam = self.game_manager.player.camera
+            for p in self.online_manager.get_list_players():
+                if p.get("map") != self.game_manager.current_map.path_name:
+                    continue
+                pid = int(p["id"])
+                anim = self.online_anims.get(pid)
+                if anim:
+                    anim.draw(screen, cam)
 
         #畫出右上角的按鈕
         self.overlay_button.draw(screen)
@@ -1342,14 +1479,24 @@ class GameScene(Scene):
             if hint_text:
                 self._draw_hint_under_player(screen, hint_text, y_offset=18)
         
-        if self.online_manager and self.game_manager.player:
-            list_online = self.online_manager.get_list_players()
-            for player in list_online:
-                if player["map"] == self.game_manager.current_map.path_name:
-                    cam = self.game_manager.player.camera
-                    pos = cam.transform_position_as_position(Position(player["x"], player["y"]))
-                    self.sprite_online.update_pos(pos)
-                    self.sprite_online.draw(screen)
+        # if self.online_manager and self.game_manager.player:
+        #     cam = self.game_manager.player.camera
+        #     for p in self.online_manager.get_list_players():
+        #         if str(p.get("map", "")) != self.game_manager.current_map.path_name:
+        #             continue
+
+        #         pid = int(p.get("id", -1))
+        #         if pid < 0:
+        #             continue
+
+        #         spr = self.online_sprites.get(pid)
+        #         if spr is None:
+        #             spr = Sprite("character/ow1.png", (48, 48))
+        #             self.online_sprites[pid] = spr
+
+        #         pos = cam.transform_position_as_position(Position(float(p["x"]), float(p["y"])))
+        #         spr.update_pos(pos)
+        #         spr.draw(screen)
         
         #shop
         if self.shop.overlay_open: self.shop.draw(screen)
@@ -1425,4 +1572,10 @@ class GameScene(Scene):
 
                     acc = (dist + acc) - seg_len
                     last = (x2, y2)
+        #chat
+        if self._chat_overlay:
+            self._chat_overlay.draw(screen)    
+
+
+          
             

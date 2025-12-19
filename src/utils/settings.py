@@ -15,7 +15,7 @@ class Settings:
     AUDIO_VOLUME: float = 0.5   # Volume of audio
     MUTE_BGM: bool = False      #讓bgmsame
     # Online
-    IS_ONLINE: bool = False
+    IS_ONLINE: bool = True
     ONLINE_SERVER_URL: str = "http://localhost:8989"
     
 GameSettings = Settings()

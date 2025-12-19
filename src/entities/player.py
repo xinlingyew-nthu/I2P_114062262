@@ -145,7 +145,7 @@ class Player(Entity):
                     # 從家出來 → 出現在家門口外面
                     elif self.game_manager.current_map_key == "home.tmx":
                         # 用你在 Tiled 看到的「家門口外面那格」tile 座標替換
-                        home_out_x, home_out_y = 16, 29  # 例子：自己改
+                        home_out_x, home_out_y = 16, 29  # 例子
                         self.game_manager.next_spawn = Position(
                             home_out_x * tile,
                             home_out_y * tile

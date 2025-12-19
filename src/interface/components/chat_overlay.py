@@ -42,6 +42,12 @@ class ChatOverlay(UIComponent):
         #     self._font_msg = pg.font.SysFont(..., ...)
         #     self._font_input = pg.font.SysFont(..., ...)
         """
+        try:
+            self._font_msg = pg.font.Font(font_path, 14)
+            self._font_input = pg.font.Font(font_path, 16)
+        except Exception:
+            self._font_msg = pg.font.SysFont("consolas", 14)
+            self._font_input = pg.font.SysFont("consolas", 16)
 
     def open(self) -> None:
         if not self.is_open:
@@ -67,6 +73,7 @@ class ChatOverlay(UIComponent):
             if input_manager.key_pressed(k):
                 ch = chr(ord('a') + (k - pg.K_a))
                 self._input_text += (ch.upper() if shift else ch)
+                
 
         # TODO
         # Enter to send. You can use the below code, just fill in the blanks.
@@ -81,7 +88,37 @@ class ChatOverlay(UIComponent):
                 if ok:
                     self._input_text = ""
         """
-        pass
+        # letters
+        shift = input_manager.key_down(pg.K_LSHIFT) or input_manager.key_down(pg.K_RSHIFT)
+        for k in range(pg.K_a, pg.K_z + 1):
+            if input_manager.key_pressed(k):
+                ch = chr(ord('a') + (k - pg.K_a))
+                self._input_text += (ch.upper() if shift else ch)
+
+        # numbers 0-9
+        for k in range(pg.K_0, pg.K_9 + 1):
+            if input_manager.key_pressed(k):
+                self._input_text += chr(ord('0') + (k - pg.K_0))
+
+        # space
+        if input_manager.key_pressed(pg.K_SPACE):
+            self._input_text += " "
+
+        # backspace
+        if input_manager.key_pressed(pg.K_BACKSPACE):
+            self._input_text = self._input_text[:-1]
+
+        # Enter to send
+        if input_manager.key_pressed(pg.K_RETURN) or input_manager.key_pressed(pg.K_KP_ENTER):
+            txt = self._input_text.strip()
+            if txt and self._send_callback:
+                ok = False
+                try:
+                    ok = self._send_callback(txt)   
+                except Exception:
+                    ok = False
+                if ok:
+                    self._input_text = ""
 
     def update(self, dt: float) -> None:
         if not self.is_open:
@@ -93,6 +130,9 @@ class ChatOverlay(UIComponent):
         #     self.close()
         #     return
         """
+        if input_manager.key_pressed(pg.K_ESCAPE):
+            self.close()
+            return
         # Typing
         if self._just_opened:
             self._just_opened = False
@@ -136,12 +176,13 @@ class ChatOverlay(UIComponent):
         bg2 = pg.Surface((box_w, box_h), pg.SRCALPHA)
         bg2.fill((0, 0, 0, 160))
         _ = screen.blit(bg2, (x, box_y))
-        # Text
-        # txt = self._input_text
-        # text_surf = self._font_input.____(..., ..., (..., ..., ...)) <- over here we need to RENDER the text, what function should we call?
-        # _ = screen.blit(text_surf, (x + 8, box_y + 4))
-        # Caret
-        # if self._cursor_visible:
-        #     cx = x + 8 + text_surf.get_width() + 2
-        #     cy = box_y + 6
-        #     pg.draw.rect(screen, (255, 255, 255), pg.Rect(cx, cy, 2, box_h - 12))
+        #Text
+        txt = self._input_text
+        text_surf = self._font_input.render(txt, True, (255, 255, 255))
+        _ = screen.blit(text_surf, (x + 8, box_y + 4))
+        _ = screen.blit(text_surf, (x + 8, box_y + 4))
+        #Caret
+        if self._cursor_visible:
+            cx = x + 8 + text_surf.get_width() + 2
+            cy = box_y + 6
+            pg.draw.rect(screen, (255, 255, 255), pg.Rect(cx, cy, 2, box_h - 12))
