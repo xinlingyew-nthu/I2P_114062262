@@ -657,10 +657,10 @@ class GameScene(Scene):
                 if not (0 <= nx < w and 0 <= ny < h): continue
                 if (nx, ny) in blocked: continue
                 
-                # 如果是斜向移動，必須確保兩側的軸向格子也是空的
-                if dx != 0 and dy != 0:
-                    if (x + dx, y) in blocked or (x, y + dy) in blocked:
-                        continue
+                # # 如果是斜向移動，必須確保兩側的軸向格子也是空的
+                # if dx != 0 and dy != 0:
+                #     if (x + dx, y) in blocked or (x, y + dy) in blocked:
+                #         continue
 
                 if (nx, ny) not in prev:
                     prev[(nx, ny)] = (x, y)
@@ -900,11 +900,11 @@ class GameScene(Scene):
         self.checkbox_button.img_button_default = sprite
         self.checkbox_button.img_button_hover = sprite
         self.checkbox_button.img_button = sprite
+
         
     @override
     def exit(self) -> None:
-        if self.online_manager:
-            self.online_manager.exit()
+        pass
 
     # def shop(self,dt):
     #     bag = self.game_manager.bag
@@ -979,24 +979,29 @@ class GameScene(Scene):
                 self.close_overlay()
             return
         
-        active = self._active_modal()
+
         #chat
         if self._chat_overlay:
-            # 用 T 开
-            if input_manager.key_pressed(pg.K_t) and active is None:
+            # 只有在完全沒 UI modal 時才允許按 T 打開
+            if input_manager.key_pressed(pg.K_t) and (not self._ui_modal_open()):
                 if not self._chat_overlay.is_open:
                     self._chat_overlay.open()
-                    active = "chat"
 
+            # 如果 chat 正在开着，ESC 只负责关 chat
+            if self._chat_overlay.is_open and input_manager.key_pressed(pg.K_ESCAPE):
+                # 如果 ChatOverlay 有 close() 用 close()
+                if hasattr(self._chat_overlay, "close"):
+                    self._chat_overlay.close()
+                else:
+                    self._chat_overlay.is_open = False
+                return
 
-            # 如果正在打字：只让 chat 处理输入，别让游戏其他系统读到按键
-
+            # 先更新 chat（让它吃键盘）
             self._chat_overlay.update(dt)
 
-        if self._chat_overlay.is_open:
-            if input_manager.key_pressed(pg.K_ESCAPE):
-                self._chat_overlay.close()
-            return  
+            # ✅ 只要 chat 開著：鎖住整個遊戲輸入
+            if self._chat_overlay.is_open:
+                return
         
 
         pressed_e = input_manager.key_pressed(pg.K_e)
@@ -1144,7 +1149,7 @@ class GameScene(Scene):
 
 
         #更新位置
-        active = self._active_modal()
+
 
         #只有完全没有 modal 打开时，才允许点右上角按钮
         if active is None:
@@ -1286,22 +1291,32 @@ class GameScene(Scene):
                 self._last_chat_id_seen = max_id
             except Exception:
                 pass
-        if self.online_manager:
-            alive = set()
-            for p in self.online_manager.get_list_players():
-                pid = int(p["id"])
-                alive.add(pid)
-                if pid not in self.online_anims:
-                    self.online_anims[pid] = Animation(
-                        "character/ow1.png",
-                        ["down", "left", "right", "up"], 4,
-                        (GameSettings.TILE_SIZE, GameSettings.TILE_SIZE))
+        # if self.online_manager:
+        #     alive = set()
+        #     for p in self.online_manager.get_list_players():
+        #         pid = int(p["id"])
+        #         alive.add(pid)
+        #         if pid not in self.online_anims:
+        #             self.online_anims[pid] = Animation(
+        #                 "character/ow1.png",
+        #                 ["down", "left", "right", "up"], 4,
+        #                 (GameSettings.TILE_SIZE, GameSettings.TILE_SIZE))
         #esc
-        if  (not self.shop.overlay_open) and input_manager.key_pressed(pg.K_ESCAPE):
-            if self.overlaybag_open or self.overlay_open:
-                self.overlay_button_back.on_click()
-            else:
-                self.open_overlay()
+        # if input_manager.key_pressed(pg.K_ESCAPE):
+        #     # dialog 你上面已經 return 了，所以這裡不管 dialog
+        #     if self.nav_open:
+        #         self._close_nav()
+        #         return
+        #     if self.shop.overlay_open:
+        #         # 如果你的 shop 有 close function，用它
+        #         self.shop.overlay_open = False
+        #         return
+        #     if self.overlaybag_open or self.overlay_open:
+        #         self.close_overlay()
+        #         return
+
+        #     # ✅ 走到這裡代表沒有任何 modal
+        #     self.open_overlay()
         # #shop
         # if self.shop.overlay_open:
         #     self.shop.update(dt)
@@ -1461,10 +1476,16 @@ class GameScene(Scene):
         #online manager
         if (not self._ui_modal_open()) and self.online_manager and self.game_manager.player:
             cam = self.game_manager.player.camera
+            local_pid = int(self.online_manager.player_id)
+
             for p in self.online_manager.get_list_players():
                 if p.get("map") != self.game_manager.current_map.path_name:
                     continue
+
                 pid = int(p["id"])
+                if pid == local_pid:
+                    continue  
+
                 anim = self.online_anims.get(pid)
                 if anim:
                     anim.draw(screen, cam)

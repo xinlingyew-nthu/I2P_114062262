@@ -416,7 +416,7 @@ class BushScene(Scene):
             self.message_text = (
                 f"{self.player_mon['name']} attacks! "
                 f"{self.wild_mon['name']} is very weak now... "
-                "Press ENTER to throw a Pokéball or ESC to run."
+                "Press ENTER to throw a Pokeball or ESC to run."
             )
             return
 
