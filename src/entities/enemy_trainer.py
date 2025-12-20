@@ -90,8 +90,8 @@ class EnemyTrainer(Entity):
     #     if player_mon_data and enemy_mon_data:
     #         scene_manager.change_scene(
     #             "battle", 
-    #             player_monster=player_mon_data, # ✅ 作为关键字参数传入
-    #             enemy_monster=enemy_mon_data     # ✅ 作为关键字参数传入
+    #             player_monster=player_mon_data, #作为关键字参数传入
+    #             enemy_monster=enemy_mon_data     #作为关键字参数传入
     # )
             #     player_monster=your_mon,
             #     enemy_monster=enemy.monster_list[0]

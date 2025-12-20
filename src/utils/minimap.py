@@ -19,12 +19,12 @@ class MiniMap:
             max(1, int(world_size[1]))
         )
 
-        # ===== cache（切回同一張圖不用重算）=====
+        # cache（切回同一張圖不用重算）
         if map_key in self._cache:
             self.map_img = self._cache[map_key]
             return
 
-        # ===== 關鍵：直接用 map._surface =====
+        # 關鍵：直接用 map._surface 
         if not hasattr(current_map, "_surface"):
             # 保底：畫灰底，不炸
             surf = pg.Surface(self.size, pg.SRCALPHA)
@@ -56,12 +56,12 @@ class MiniMap:
         mw, mh = self.size
         ww, wh = self.world_size
 
-        # ===== 玩家紅點 =====
+        # 玩家紅點 
         px = x + int(player_pos[0] / ww * mw)
         py = y + int(player_pos[1] / wh * mh)
         pg.draw.circle(screen, (255, 0, 0), (px, py), 4)
 
-        # ===== 視角框（藍色）=====
+        # 視角框（藍色
         if camera_rect:
             rx = x + int(camera_rect.x / ww * mw)
             ry = y + int(camera_rect.y / wh * mh)

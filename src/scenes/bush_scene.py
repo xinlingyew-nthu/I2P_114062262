@@ -611,7 +611,7 @@ class BushScene(Scene):
         w, h = surf.get_size()
         if w == 0 or h == 0:
             return surf
-        scale = min(max_w / w, max_h / h, 1.0)  # ✅ 只縮小不放大，避免超出框
+        scale = min(max_w / w, max_h / h, 1.0)  #  只縮小不放大，避免超出框
         new_w = max(1, int(w * scale))
         new_h = max(1, int(h * scale))
         return pg.transform.smoothscale(surf, (new_w, new_h))
@@ -1140,7 +1140,7 @@ class BushScene(Scene):
                 atk_buff = mon.get("buff_strength_pending", False)
                 dfs_buff = mon.get("buff_defense_pending", False)
 
-                enemy_def = self.wild_mon.get("defense", 0) if self.wild_mon else 0  # ✅ 取野怪 DEF
+                enemy_def = self.wild_mon.get("defense", 0) if self.wild_mon else 0  #  取野怪 DEF
 
                 atk_text = f"ATK: {atk}  vs DEF: {enemy_def}" + ("  (+)" if atk_buff else "")
                 dfs_text = f"DEF: {dfs}" + ("  (+)" if dfs_buff else "")

@@ -282,7 +282,7 @@ class GameScene(Scene):
     def checkbox_check(self):
         new_muted = not self.is_muted
         if new_muted == self.is_muted:
-            return  # ✅ 没变化就别动音频
+            return  #  没变化就别动音频
 
         self.is_muted = new_muted
         GameSettings.MUTE_BGM = self.is_muted
@@ -391,7 +391,7 @@ class GameScene(Scene):
         if wx is None or wy is None:
             return None
 
-        # ✅ 如果看起來是像素（很大），轉成 tile
+        #  如果看起來是像素（很大），轉成 tile
         # 常見 map 大小 < 200 tiles，所以 px 通常會 > 200
         if wx > 200 or wy > 200:
             return int(wx // t), int(wy // t)
@@ -974,6 +974,41 @@ class GameScene(Scene):
             self.checkbox_button.update(dt)
             self.save_button.update(dt)
             self.load_button.update(dt)
+            slider_rect=pg.Rect(
+                self.slider_x,
+                self.slider_y,
+                self.slider_size_width,
+                self.slider_size_height
+            )
+        
+            #slider
+            dot_center_x=self.slider_x+int(self.slider_value / 100* self.slider_size_width) 
+            dot_rect = pg.Rect(
+                dot_center_x - self.dot_width // 2,
+                self.slider_y - (self.dot_height - self.slider_size_height) // 2,
+                self.dot_width,
+                self.dot_height
+            )
+            
+            mouse_x,mouse_y=pg.mouse.get_pos()
+            mouse_down=pg.mouse.get_pressed()[0]
+            if mouse_down:
+                if (not self.slider_touch) and (
+                    dot_rect.collidepoint(mouse_x, mouse_y)
+                    or slider_rect.collidepoint(mouse_x, mouse_y)
+                ):
+                    self.slider_touch = True
+                
+                if self.slider_touch:
+                    mouse_x_clamped = max(self.slider_x,
+                                        min(self.slider_x + self.slider_size_width, mouse_x))
+                    ratio = (mouse_x_clamped - self.slider_x) / self.slider_size_width
+                    self.slider_value = int(ratio * 100)
+
+                    if not self.is_muted and sound_manager.current_bgm is not None:
+                        sound_manager.set_bgm_volume(self.slider_value/100)
+            else:
+                self.slider_touch = False       
 
             if input_manager.key_pressed(pg.K_ESCAPE):
                 self.close_overlay()
@@ -999,7 +1034,7 @@ class GameScene(Scene):
             # 先更新 chat（让它吃键盘）
             self._chat_overlay.update(dt)
 
-            # ✅ 只要 chat 開著：鎖住整個遊戲輸入
+            #  只要 chat 開著：鎖住整個遊戲輸入
             if self._chat_overlay.is_open:
                 return
         
@@ -1315,7 +1350,7 @@ class GameScene(Scene):
         #         self.close_overlay()
         #         return
 
-        #     # ✅ 走到這裡代表沒有任何 modal
+        #     #  走到這裡代表沒有任何 modal
         #     self.open_overlay()
         # #shop
         # if self.shop.overlay_open:
@@ -1401,42 +1436,6 @@ class GameScene(Scene):
             #     self.game_manager.bag.scroll=max_scroll
             # if self.game_manager.bag.scroll<min_scroll:
             #     self.game_manager.bag.scroll=min_scroll
-
-        slider_rect=pg.Rect(
-            self.slider_x,
-            self.slider_y,
-            self.slider_size_width,
-            self.slider_size_height
-        )
-     
-        #slider
-        dot_center_x=self.slider_x+int(self.slider_value / 100* self.slider_size_width) 
-        dot_rect = pg.Rect(
-            dot_center_x - self.dot_width // 2,
-            self.slider_y - (self.dot_height - self.slider_size_height) // 2,
-            self.dot_width,
-            self.dot_height
-        )
-        
-        mouse_x,mouse_y=pg.mouse.get_pos()
-        mouse_down=pg.mouse.get_pressed()[0]
-        if mouse_down:
-            if (not self.slider_touch) and (
-                dot_rect.collidepoint(mouse_x, mouse_y)
-                or slider_rect.collidepoint(mouse_x, mouse_y)
-            ):
-                self.slider_touch = True
-            
-            if self.slider_touch:
-                mouse_x_clamped = max(self.slider_x,
-                                      min(self.slider_x + self.slider_size_width, mouse_x))
-                ratio = (mouse_x_clamped - self.slider_x) / self.slider_size_width
-                self.slider_value = int(ratio * 100)
-
-                if not self.is_muted and sound_manager.current_bgm is not None:
-                    sound_manager.set_bgm_volume(self.slider_value/100)
-        else:
-            self.slider_touch = False       
 
         #nav 清楚路线
         if input_manager.key_pressed(pg.K_n):

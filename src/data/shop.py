@@ -141,13 +141,13 @@ class Shop:
         self.scroll = 0
         self.mode = "buy"
 
-        # # 🚫 如果正在 restock，就不要刷新怪物
+        # #  如果正在 restock，就不要刷新怪物
         # if self.monster_stock <= 0 and self.monster_restock_timer > 0:
         #     self._rebuild_all_buttons()
         #     self._update_scroll_range()
         #     return
 
-        # # ✅ 正常情況才生成新怪物
+        # #  正常情況才生成新怪物
         # self.shop_monster.clear()
         # if MONSTER_DATA:
         #     sample_count = min(self.monster_stock_max, len(MONSTER_DATA))
@@ -350,7 +350,7 @@ class Shop:
 
 
         if self.mode == "buy":
-            # ====== 買 Monster ======
+            #  買 Monster 
             monster_x = flat_x + 40
             monster_y = flat_y + 90
             banner_w, banner_h = self.monster_banner.get_size()
@@ -361,7 +361,7 @@ class Shop:
                 btn_x = monster_x + banner_w - btn_w + 50
                 btn_y = y + (banner_h - btn_h) // 2
 
-                # ✅ 用 closure 把 mon 鎖住
+                #  用 closure 把 mon 鎖住
                 # def make_cb_buy(m=mon):
                 #     def _cb():
                 #         self._buy_monster(m)
@@ -378,7 +378,7 @@ class Shop:
                 )
                 self.buy_monster_buttons.append(btn)
 
-            # ====== 買 Items ======
+            # 買 Items 
             items_x = flat_x + 40
             items_y = flat_y + 90 + len(self.shop_monster) * (banner_h + 20) + 10
             banner_w_i, banner_h_i = self.item_banner.get_size()
@@ -389,7 +389,7 @@ class Shop:
                 btn_x = items_x + banner_w_i - btn_w_i + 50
                 btn_y = y + (banner_h_i - btn_h_i) // 2
 
-                # ✅ 一樣用 closure 把 item_cfg 鎖住
+                # ✅一樣用 closure 把 item_cfg 鎖住
                 # def make_cb_item(item_cfg=it):
                 #     def _cb():
                 #         self._buy_item(item_cfg)

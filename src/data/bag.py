@@ -257,7 +257,7 @@ class Bag:
             used = True
             msg = "Attack used"
 
-        # ========== Defense Potion ==========
+        # Defense Potion
         elif name == "Defense Potion":
             if mon.get("buff_defense_pending", False):
                 return {"used": False, "message": "Defense has been used"}
@@ -265,11 +265,11 @@ class Bag:
             used = True
             msg = "Defense used"
 
-        # ========== Level Up ==========
+        # Level Up
         elif name == "Level Up":
             used, msg = self._level_up_mon(mon)
 
-        # ========== Evolve Stone ==========
+        # Evolve Stone
         elif name == "Evolve Stone":
             used, msg = self._evolve_mon(mon)
 
@@ -277,7 +277,7 @@ class Bag:
             # 其他道具一律沒效果（如果你只留三種 Potion 就不會走到這裡）
             return {"used": False, "message": "Nothing happened"}
 
-        # ===== 扣道具 =====
+        #扣道具 
         if used:
             item["count"] -= 1
             if item["count"] <= 0:
@@ -420,10 +420,10 @@ class Bag:
         item_max_scroll = 0
         item_min_scroll = min(0, item_list_h - total_item_height)
 
-        # ✅ 先 clamp
+        # 先 clamp
         self.item_scroll = max(item_min_scroll, min(item_max_scroll, self.item_scroll))
 
-        # ✅ 再算 y
+        # 再算 y
         y = items_y + self.item_scroll
         if self._items_data:
             for it in self._items_data:

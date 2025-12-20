@@ -30,8 +30,7 @@ class Monster:
         self.attack_sprite = Sprite(self.battle_attack_path, size=(180, 180))
         self.current_sprite = self.idle_sprite
 
-    # ====== 成長公式 ======
-
+    #  成長公式 evo
     def calculate_hp(self):
         return self.base_max_hp + (self.level - 1) * 8
 
@@ -41,7 +40,7 @@ class Monster:
     def calculate_defense(self):
         return self.base_defense + (self.level - 1) * 2
 
-    # ====== 進化 ======
+    # 進化 
 
     def evolve(self, MONSTER_DATA):
         if self.evolve_to is None:

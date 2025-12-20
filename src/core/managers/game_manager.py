@@ -96,7 +96,7 @@ class GameManager:
                 with open(path, "r", encoding="utf-8") as f:
                     old = json.load(f)
 
-            # ✅ 保留旧的 map（里面包含 teleport / spawn / trainers 配置）
+            #保留旧的 map（里面包含 teleport / spawn / trainers 配置）
             keep_map = old.get("map")
 
             new_data = self.to_dict()
