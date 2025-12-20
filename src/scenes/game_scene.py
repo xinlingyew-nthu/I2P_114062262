@@ -880,10 +880,60 @@ class GameScene(Scene):
             )
 
     def _update_online_and_bubbles(self, dt: float) -> None:
-        # 1) 同步自己位置给服务器（让别人看到你动）
-        if self.game_manager.player is not None and self.online_manager is not None:
+        if not self.online_manager:
+            return
+
+        # A) 更新 other players 动画/位置（chat 开着也要跑）
+        if self.game_manager.player:
+            alive: set[int] = set()
+
+            for p in self.online_manager.get_list_players():
+                pid = int(p["id"])
+                alive.add(pid)
+
+                if pid not in self.online_anims:
+                    self.online_anims[pid] = Animation(
+                        "character/ow1.png",
+                        ["down", "left", "right", "up"], 4,
+                        (GameSettings.TILE_SIZE, GameSettings.TILE_SIZE)
+                    )
+                    wx, wy = self._online_world_pos(p)
+                    self.online_last_pos[pid] = (wx, wy)
+                    self.online_facing[pid] = "down"
+                    self.online_move_timer[pid] = 0.0
+
+                # 不同地图：不更新动画（你也可以保留 last_pos）
+                if p.get("map") != self.game_manager.current_map.path_name:
+                    continue
+
+                wx, wy = self._online_world_pos(p)
+                lastx, lasty = self.online_last_pos.get(pid, (wx, wy))
+                dx, dy = wx - lastx, wy - lasty
+
+                moved_now = (abs(dx) + abs(dy)) > 0.5
+                if moved_now:
+                    self.online_move_timer[pid] = 0.12
+                else:
+                    self.online_move_timer[pid] = max(0.0, self.online_move_timer.get(pid, 0.0) - dt)
+
+                moving = self.online_move_timer.get(pid, 0.0) > 0.0
+                facing = self._dir_from_delta(dx, dy, self.online_facing.get(pid, "down"))
+                self.online_facing[pid] = facing
+
+                anim = self.online_anims[pid]
+                anim.switch(facing)
+                anim.update_pos(Position(wx, wy))
+                if moving:
+                    anim.update(dt)
+                else:
+                    anim.accumulator = 0.0
+
+                self.online_last_pos[pid] = (wx, wy)
+
+        # B) 同步自己位置（让别人看到你）
+        if self.game_manager.player is not None:
             try:
-                _ = self.online_manager.update(
+                self.online_manager.update(
                     self.game_manager.player.position.x,
                     self.game_manager.player.position.y,
                     self.game_manager.current_map.path_name
@@ -891,41 +941,40 @@ class GameScene(Scene):
             except Exception as e:
                 Logger.error(f"online update failed: {e}")
 
-        # 2) 拉聊天并更新 bubble（让你看到别人说话）
-        if self.online_manager:
-            try:
-                msgs = list(self.online_manager.get_recent_chat(50))
-                now = time.monotonic()
+        # C) 拉 chat 更新 bubble（你原本那段）
+        try:
+            msgs = list(self.online_manager.get_recent_chat(50))
+            now = time.monotonic()
+            for m in msgs:
+                sender_raw = m.get("from", m.get("pid", m.get("player_id", -1)))
+                try:
+                    sender = int(sender_raw)
+                except Exception:
+                    sender = -1
 
-                for m in msgs:
-                    sender_raw = m.get("from", m.get("pid", m.get("player_id", -1)))
-                    try:
-                        sender = int(sender_raw)
-                    except Exception:
-                        sender = -1
+                text = str(m.get("text", "")).strip()
+                if sender < 0 or not text:
+                    continue
 
-                    text = str(m.get("text", "")).strip()
-                    if sender < 0 or not text:
-                        continue
+                mid_raw = m.get("id", None)
+                try:
+                    mid = int(mid_raw)
+                except Exception:
+                    mid = None
 
-                    mid_raw = m.get("id", None)
-                    try:
-                        mid = int(mid_raw)
-                    except Exception:
-                        mid = None
+                key = (sender, text, mid)
+                if key in self._seen_chat_keys:
+                    continue
+                self._seen_chat_keys.add(key)
 
-                    key = (sender, text, mid)
-                    if key in self._seen_chat_keys:
-                        continue
-                    self._seen_chat_keys.add(key)
+                if len(self._seen_chat_keys) > self._seen_chat_keys_limit:
+                    self._seen_chat_keys = set(list(self._seen_chat_keys)[-200:])
 
-                    if len(self._seen_chat_keys) > self._seen_chat_keys_limit:
-                        self._seen_chat_keys = set(list(self._seen_chat_keys)[-200:])
+                self._chat_bubbles[sender] = (text, now + self._bubble_lifetime)
 
-                    self._chat_bubbles[sender] = (text, now + self._bubble_lifetime)
+        except Exception as e:
+            Logger.error(f"chat bubble update failed: {e}")
 
-            except Exception as e:
-                Logger.error(f"chat bubble update failed: {e}")
             
 
     @override
@@ -1538,7 +1587,7 @@ class GameScene(Scene):
         for enemy in self.game_manager.current_enemy_trainers:
             enemy.draw(screen, camera)
         #online manager
-        if (not self._ui_modal_open()) and self.online_manager and self.game_manager.player:
+        if self.online_manager and self.game_manager.player:
             cam = self.game_manager.player.camera
             local_pid = int(self.online_manager.player_id)
 
@@ -1548,7 +1597,7 @@ class GameScene(Scene):
 
                 pid = int(p["id"])
                 if pid == local_pid:
-                    continue  
+                    continue
 
                 anim = self.online_anims.get(pid)
                 if anim:
