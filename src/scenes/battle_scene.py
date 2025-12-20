@@ -215,7 +215,6 @@ class BattleScene(Scene):
         self.run_confirm_open = False
         self.run_prev_state = None      
 
-        # （順便把 state_before_bag / switch 也清乾淨，避免殘留）
         self.state_before_bag = None
         self.switch_selected_mon = None
         self.switch_preview_anim = None
@@ -320,19 +319,19 @@ class BattleScene(Scene):
         def_el = element_from_str(defender.get("element", "grass"))
         elem_mul = get_element_multiplier(atk_el, def_el)
 
-        # --- Strength buff ---
+        #  Strength buff
         str_mul = 1.0
         if attacker.get("buff_strength_pending", False):
             str_mul = 1.5          # 你想要的 +50%
             attacker["buff_strength_pending"] = False  # 用完一次就清掉
 
-        # --- Defense buff ---
+        #  Defense buff 
         def_mul = 1.0
         if defender.get("buff_defense_pending", False):
             def_mul = 0.5          # 你想要的 -50% 傷害
             defender["buff_defense_pending"] = False   # 用完一次就清掉
 
-        # === 逐步計算 ===
+        # 逐步計算
         # 1) base -> element
         dmg_after_elem = max(1, int(base * elem_mul))
         elem_bonus = dmg_after_elem - base
@@ -573,7 +572,7 @@ class BattleScene(Scene):
             self.add_toast("You can't switch to a fainted monster.")
             return
 
-        # --- 真的把這隻當作上場怪 ---
+        #  真的把這隻當作上場
         self.player_mon = mon
 
         base_player_img = load_img(mon["sprite_path"])
@@ -659,7 +658,7 @@ class BattleScene(Scene):
         #toast
         self._update_toasts(dt)    
         
-    #    # 還沒 setup 完成，就不要畫 / 不要戰鬥，避免 NoneType
+        # 還沒 setup 完成，就不要畫 / 不要戰鬥，避免 NoneType
         if self.player_mon is None or self.enemy_mon is None:
             return      
         
@@ -1159,7 +1158,7 @@ class BattleScene(Scene):
                     img = load_img(mon["sprite_path"])
                     img = pg.transform.scale(img, (180, 180))
 
-                # --- switch preview ---
+                # switch preview
                 img = self.switch_preview_anim.get_image() if self.switch_preview_anim else load_img(mon["sprite_path"])
                 img = self._fit_to_box(img, preview_rect.width - 20, preview_rect.height - 20)
 

@@ -74,7 +74,7 @@ class EnemyTrainer(Entity):
             game_scene = scene_manager.get_scene("game")
             if self.is_shop:
                 # 這個 NPC 是 shop
-                # 如果你的 GameScene.open_shop 有收 trainer，就保留 (self)
+                # 如果 GameScene.open_shop 有收 trainer，就保留 (self)
                 # 如果沒有，就改成 game_scene.open_shop()
                 game_scene.open_shop(self)
             else:

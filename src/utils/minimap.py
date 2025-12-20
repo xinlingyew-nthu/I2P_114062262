@@ -9,11 +9,6 @@ class MiniMap:
         self._cache = {}           # map_key -> Surface
 
     def build_from_map(self, current_map, world_size, map_key):
-        """
-        current_map : Map 物件
-        world_size  : (map_pixel_w, map_pixel_h)
-        map_key     : current_map.path_name
-        """
         self.world_size = (
             max(1, int(world_size[0])),
             max(1, int(world_size[1]))

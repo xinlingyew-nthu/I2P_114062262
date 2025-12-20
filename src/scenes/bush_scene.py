@@ -363,16 +363,16 @@ class BushScene(Scene):
         # --- Strength buff ---
         str_mul = 1.0
         if attacker.get("buff_strength_pending", False):
-            str_mul = 1.5          # 你想要的 +50%
+            str_mul = 1.5          # +50%
             attacker["buff_strength_pending"] = False  # 用完一次就清掉
 
         # --- Defense buff ---
         def_mul = 1.0
         if defender.get("buff_defense_pending", False):
-            def_mul = 0.5          # 你想要的 -50% 傷害
+            def_mul = 0.5          # -50% 傷害
             defender["buff_defense_pending"] = False   # 用完一次就清掉
 
-        # === 逐步計算 ===
+        # 逐步計算
         # 1) base -> element
         dmg_after_elem = max(1, int(base * elem_mul))
         elem_bonus = dmg_after_elem - base
@@ -589,7 +589,7 @@ class BushScene(Scene):
             self.add_toast("You can't switch to a fainted monster.")
             return
 
-        # --- 真的把這隻當作上場怪 ---
+        # 真的把這隻當作上場怪 
         self.player_mon = mon
 
         base_player_img = load_img(mon["sprite_path"])
@@ -650,7 +650,7 @@ class BushScene(Scene):
                 # 一開始讓野怪先攻擊
                 self._start_enemy_attack()
                 return
-        #swutch
+        #switch
         if self.state == "switch":
             # 滾輪捲動
             if input_manager.mouse_wheel != 0:
@@ -770,7 +770,7 @@ class BushScene(Scene):
 
         # 2. Monster Icon 
         icon_size = 60
-        # 如果是放在右邊的敵人，我們可以考慮把 icon 放在右側，但為了模仿 Bag，我們先統一放左側
+        # 如果是放在右邊的敵人，我們可以考慮把 icon 放在右側
         icon_x = banner_rect.left +30
         icon_y = banner_rect.top + (banner_rect.height - icon_size) // 2 - 10
         
@@ -784,12 +784,12 @@ class BushScene(Scene):
         name_surf = self.word_font.render(mon["name"], True, (0, 0, 0))
         screen.blit(name_surf, (text_x, text_y))
 
-        # 等級 Level (模仿 Bag 放在右側)
+        # 等級 Level 
         level = self.word_font.render(f"Lv.{mon['level']}", True, (0, 0, 0))
         # 稍微靠左一點，避免超出 Banner
         screen.blit(level, (banner_rect.right - 80, text_y))
 
-        # HP Bar (這是最精華的部分，直接用 Bag 的邏輯)
+        # HP Bar 
         bar_w = 220
         bar_h = 18
         bar_x = icon_x+72+24
@@ -1044,7 +1044,6 @@ class BushScene(Scene):
             prev_clip = screen.get_clip()
             screen.set_clip(list_view_rect)
 
-            # 左側：怪物列表
             for info in self.switch_buttons:
                 btn = info["button"]
                 mon = info["monster"]

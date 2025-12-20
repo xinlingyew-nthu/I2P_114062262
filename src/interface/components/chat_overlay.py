@@ -7,7 +7,6 @@ from src.utils import Logger
 
 
 class ChatOverlay(UIComponent):
-    """Lightweight chat UI similar to Minecraft: toggle with a key, type, press Enter to send."""
     is_open: bool
     _input_text: str
     _cursor_timer: float

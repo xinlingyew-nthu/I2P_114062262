@@ -97,7 +97,7 @@ class GameScene(Scene):
         # 建立button
         button_x=GameSettings.SCREEN_WIDTH-80 #靠右邊
         button_y=20 #上下
-        button_w=60
+        button_w=60 
         button_h=60
 
         #模仿menuscene的
@@ -230,8 +230,8 @@ class GameScene(Scene):
         self.map_pixel_w = 1
         self.map_pixel_h = 1   
         self.nav_map_route:list[str] =["map.tmx","beach.tmx","gym.tmx"]
-        # nav button (在 bag 按鈕左邊)
-        button_nav_x = GameSettings.SCREEN_WIDTH - 220   # 比 -150 再往左 70（可自己調）
+        # nav button 
+        button_nav_x = GameSettings.SCREEN_WIDTH - 220  
         button_nav_y = 20
         button_nav_w = 60
         button_nav_h = 60
@@ -391,7 +391,7 @@ class GameScene(Scene):
         if wx is None or wy is None:
             return None
 
-        #  如果看起來是像素（很大），轉成 tile
+        # 如果看起來是像素（很大），轉成 tile
         # 常見 map 大小 < 200 tiles，所以 px 通常會 > 200
         if wx > 200 or wy > 200:
             return int(wx // t), int(wy // t)
@@ -417,7 +417,6 @@ class GameScene(Scene):
 
     def start_battle_with_trainer(self, trainer):
     # 1. 取得玩家第一隻怪（你 Bag 裡的資料）
-    # 1. 找一隻自己還活著的 monster
         player_mon: dict | None = None
         for m in self.game_manager.bag._monsters_data:
             if m["hp"] > 0:
@@ -656,11 +655,6 @@ class GameScene(Scene):
                 
                 if not (0 <= nx < w and 0 <= ny < h): continue
                 if (nx, ny) in blocked: continue
-                
-                # # 如果是斜向移動，必須確保兩側的軸向格子也是空的
-                # if dx != 0 and dy != 0:
-                #     if (x + dx, y) in blocked or (x, y + dy) in blocked:
-                #         continue
 
                 if (nx, ny) not in prev:
                     prev[(nx, ny)] = (x, y)
@@ -709,7 +703,7 @@ class GameScene(Scene):
             "name": "Pikachu",
             "element": "electric",
             "level": 5,
-            "max_hp": 200,
+            "max_hp": 520,
             "hp": 200,
             "attack": 30,
             "defense": 10,
@@ -771,12 +765,10 @@ class GameScene(Scene):
         screen.blit(surf, (bg_rect.x + pad, bg_rect.y + pad))
 
     def _online_world_pos(self, p: dict) -> tuple[float, float]:
-        """把 online 回来的 x,y 转成世界像素座标(px)"""
         x = float(p["x"])
         y = float(p["y"])
 
         # 自动判断：如果数值很小(例如 < 200)，通常是 tile；否则是 pixel
-        # 你的地图像素通常会 > 200
         if x < 200 and y < 200:
             x *= GameSettings.TILE_SIZE
             y *= GameSettings.TILE_SIZE
@@ -786,7 +778,7 @@ class GameScene(Scene):
         if abs(dx) < 1e-3 and abs(dy) < 1e-3:
             return last_facing
 
-        # 模仿你 Player：先看 y，再看 x
+        # 模仿 Player
         if dy < 0:
             return "up"
         elif dy > 0:
@@ -795,6 +787,7 @@ class GameScene(Scene):
             return "left"
         else:
             return "right"
+        
     def _draw_chat_bubble_for_pos(
         self,
         screen: pg.Surface,
@@ -808,7 +801,7 @@ class GameScene(Scene):
 
         # above player's head
         x = int(p.x) +30
-        y = int(p.y)   # 你可以调这个高度
+        y = int(p.y)   
 
         # 3) measure text & bubble size
         txt = font.render(text, True, (0, 0, 0))
@@ -1031,7 +1024,7 @@ class GameScene(Scene):
                     self._chat_overlay.is_open = False
                 return
 
-            # 先更新 chat（让它吃键盘）
+            # 先更新 chat
             self._chat_overlay.update(dt)
 
             #  只要 chat 開著：鎖住整個遊戲輸入
@@ -1062,7 +1055,7 @@ class GameScene(Scene):
                     self.online_last_pos[pid] = (wx, wy)
                     self.online_facing[pid] = "down"
 
-                # 不同地图：不更新动画（保留上次状态）
+                # 不同地图：不更新动画
                 if p.get("map") != self.game_manager.current_map.path_name:
                     continue
 
@@ -1072,16 +1065,16 @@ class GameScene(Scene):
                 lastx, lasty = self.online_last_pos.get(pid, (wx, wy))
                 dx, dy = wx - lastx, wy - lasty
 
-                # moving 判定：用“像素阈值”，不要用 0.001（太小）
+                # moving 判定：用“像素阈值”
                 moved_now = (abs(dx) + abs(dy)) > 0.5
                 if moved_now:
-                    self.online_move_timer[pid] = 0.12  # 0.10~0.20 自己调
+                    self.online_move_timer[pid] = 0.12 
                 else:
                     self.online_move_timer[pid] = max(0.0, self.online_move_timer.get(pid, 0.0) - dt)
 
                 moving = self.online_move_timer.get(pid, 0.0) > 0.0
 
-                # facing：模仿你 Player（y优先）
+                # facing：模仿 Player（y优先）
                 facing = self._dir_from_delta(dx, dy, self.online_facing.get(pid, "down"))
                 self.online_facing[pid] = facing
 
@@ -1124,7 +1117,7 @@ class GameScene(Scene):
                         elif not q["caught"]:
                             dialog_scene.setup(["He's still out there! I can hear the 'Pika' echoes!"])
                         else:
-                            dialog_scene.setup(["You actually found him! You're a legend, kid!"])
+                            dialog_scene.setup(["You actually found him! You're a legend, kid!I give it to you.Hope can help you"])
                         scene_manager.change_scene("dialog")
                     return
 
@@ -1159,7 +1152,7 @@ class GameScene(Scene):
                         self.nav_path = []
 
                         self.add_toast("Arrived!")
-        # 1) 先記住上一張地圖（第一次進來可能沒有）
+        # 1) 先記住上一張地圖
         prev_map = getattr(self, "_minimap_prev_map", None)
         cur_map = self.game_manager.current_map.path_name
 
@@ -1171,7 +1164,7 @@ class GameScene(Scene):
                 self.map_pixel_w = m._surface.get_width()
                 self.map_pixel_h = m._surface.get_height()
             else:
-                # 保底，避免 crash
+                # 避免 crash
                 self.map_pixel_w = 1
                 self.map_pixel_h = 1
 

@@ -18,7 +18,6 @@ class DialogScene(Scene):
         standing_frame = sheet.subsurface(pg.Rect(0, 0, frame_w, frame_h))
         self.npc_img = pg.transform.scale(standing_frame, (250, 250))
 
-        # 你原本少了这个，会报错
         self.npc_pos = (GameSettings.SCREEN_WIDTH - 260, 280)
 
         self.word_font  = pg.font.Font("assets/fonts/Minecraft.ttf", 24)

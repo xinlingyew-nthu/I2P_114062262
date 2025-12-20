@@ -14,10 +14,6 @@ class BattleAnimation:
         flip_x: bool = False,
         fps: float = 6.0,
     ) -> None:
-        """
-        從一張橫向 spritesheet 切出 frame_count 張圖，然後依 fps 播放。
-        這裡假設你的 idle 圖是：4 格橫排，每格 96x96。
-        """
         self.frames: list[pg.Surface] = []
         self.frame_index: int = 0
         self.frame_time: float = 1.0 / fps

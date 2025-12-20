@@ -591,7 +591,7 @@ class Shop:
         #         self.monster_restock_timer = 0.0
         #         self.monster_stock = self.monster_stock_max
 
-        #         # 🔄 refresh 一整組 monster
+        #         # refresh 一整組 monster
         #         self.shop_monster.clear()
         #         sample_count = min(self.monster_stock_max, len(MONSTER_DATA))
         #         for proto in random.sample(MONSTER_DATA, sample_count):
