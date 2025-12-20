@@ -67,6 +67,8 @@ class GameScene(Scene):
             self._bubble_lifetime = 3.0
             self._bubble_font = pg.font.Font("assets/fonts/Minecraft.ttf", 16)
             self._last_chat_id_seen = 0
+            self._seen_chat_keys: set[tuple] = set()
+            self._seen_chat_keys_limit = 300
 
             # wrapper：发送成功就立刻显示本地 bubble
             def _send_chat_and_bubble(txt: str) -> bool:
@@ -876,6 +878,54 @@ class GameScene(Scene):
                 text,
                 self._bubble_font
             )
+
+    def _update_online_and_bubbles(self, dt: float) -> None:
+        # 1) 同步自己位置给服务器（让别人看到你动）
+        if self.game_manager.player is not None and self.online_manager is not None:
+            try:
+                _ = self.online_manager.update(
+                    self.game_manager.player.position.x,
+                    self.game_manager.player.position.y,
+                    self.game_manager.current_map.path_name
+                )
+            except Exception as e:
+                Logger.error(f"online update failed: {e}")
+
+        # 2) 拉聊天并更新 bubble（让你看到别人说话）
+        if self.online_manager:
+            try:
+                msgs = list(self.online_manager.get_recent_chat(50))
+                now = time.monotonic()
+
+                for m in msgs:
+                    sender_raw = m.get("from", m.get("pid", m.get("player_id", -1)))
+                    try:
+                        sender = int(sender_raw)
+                    except Exception:
+                        sender = -1
+
+                    text = str(m.get("text", "")).strip()
+                    if sender < 0 or not text:
+                        continue
+
+                    mid_raw = m.get("id", None)
+                    try:
+                        mid = int(mid_raw)
+                    except Exception:
+                        mid = None
+
+                    key = (sender, text, mid)
+                    if key in self._seen_chat_keys:
+                        continue
+                    self._seen_chat_keys.add(key)
+
+                    if len(self._seen_chat_keys) > self._seen_chat_keys_limit:
+                        self._seen_chat_keys = set(list(self._seen_chat_keys)[-200:])
+
+                    self._chat_bubbles[sender] = (text, now + self._bubble_lifetime)
+
+            except Exception as e:
+                Logger.error(f"chat bubble update failed: {e}")
             
 
     @override
@@ -1027,7 +1077,9 @@ class GameScene(Scene):
             # 先更新 chat
             self._chat_overlay.update(dt)
 
-            #  只要 chat 開著：鎖住整個遊戲輸入
+            self._update_online_and_bubbles(dt)
+
+            # 只要 chat 開著：鎖住玩家控制 / 其他 UI，但不要挡网络
             if self._chat_overlay.is_open:
                 return
         
@@ -1295,30 +1347,50 @@ class GameScene(Scene):
             )
 
         #buble chat
+# bubble chat (server id may be unreliable -> use fingerprint dedupe)
         if self.online_manager:
             try:
-                msgs = self.online_manager.get_recent_chat(50)
-                max_id = self._last_chat_id_seen
+                msgs = list(self.online_manager.get_recent_chat(50))
                 now = time.monotonic()
 
                 for m in msgs:
-                    mid = int(m.get("id", 0))
-                    if mid <= self._last_chat_id_seen:
+                    # sender id: your server might use from/pid/player_id
+                    sender_raw = m.get("from", m.get("pid", m.get("player_id", -1)))
+                    try:
+                        sender = int(sender_raw)
+                    except Exception:
+                        sender = -1
+
+                    text = str(m.get("text", "")).strip()
+                    if sender < 0 or not text:
                         continue
 
-                    # TA hint uses "from"; your server might use "pid"
-                    sender = int(m.get("from", m.get("pid", -1)))
-                    text = str(m.get("text", ""))
+                    # fingerprint key: (sender, text, id if exists)
+                    # if id missing/duplicated, still fine because we also include text
+                    mid_raw = m.get("id", None)
+                    try:
+                        mid = int(mid_raw)
+                    except Exception:
+                        mid = None
 
-                    if sender >= 0 and text:
-                        self._chat_bubbles[sender] = (text, now + self._bubble_lifetime)
+                    key = (sender, text, mid)
 
-                    if mid > max_id:
-                        max_id = mid
+                    # if server gives mid=0 always, mid will be 0 -> still ok because
+                    # each different text becomes different key.
+                    if key in self._seen_chat_keys:
+                        continue
+                    self._seen_chat_keys.add(key)
 
-                self._last_chat_id_seen = max_id
-            except Exception:
-                pass
+                    # soft limit to avoid memory growth
+                    if len(self._seen_chat_keys) > self._seen_chat_keys_limit:
+                        # remove arbitrary items (good enough)
+                        self._seen_chat_keys = set(list(self._seen_chat_keys)[-200:])
+
+                    # update bubble (refresh timer)
+                    self._chat_bubbles[sender] = (text, now + self._bubble_lifetime)
+
+            except Exception as e:
+                Logger.error(f"chat bubble update failed: {e}")
         # if self.online_manager:
         #     alive = set()
         #     for p in self.online_manager.get_list_players():
