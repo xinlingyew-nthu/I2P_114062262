@@ -7,6 +7,8 @@ from src.interface.components import Button
 from src.core.services import scene_manager, sound_manager, input_manager
 from typing import override
 
+from src.utils import load_img
+
 class MenuScene(Scene):
     # Background Image
     background: BackgroundSprite
@@ -29,6 +31,12 @@ class MenuScene(Scene):
             px-100, py , 100, 100,
             lambda: scene_manager.change_scene("setting")
         )
+        self.element_panel_img = load_img("element/pokemon.png")
+        self.element_panel_img = pg.transform.scale(
+            self.element_panel_img,
+            (500, 200)   
+        )
+
 
 
     @override
@@ -51,5 +59,16 @@ class MenuScene(Scene):
     @override
     def draw(self, screen: pg.Surface) -> None:
         self.background.draw(screen)
+        self.play_button.draw(screen)
+        self.setting_button.draw(screen)
+        if self.element_panel_img:
+            img_w = self.element_panel_img.get_width()
+            img_h = self.element_panel_img.get_height()
+
+            img_x = (GameSettings.SCREEN_WIDTH - img_w) // 2
+            img_y = (GameSettings.SCREEN_HEIGHT - img_h) // 2 - 80
+
+            screen.blit(self.element_panel_img, (img_x, img_y))
+
         self.play_button.draw(screen)
         self.setting_button.draw(screen)
